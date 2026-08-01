@@ -1,0 +1,29 @@
+{
+  "name": "pi-review-panel",
+  "version": "0.1.0",
+  "description": "Session-aware review panel for the pi coding agent. Tracks every file the agent changes during a session and presents an interactive, keyboard-navigable diff view so you can review changes before committing.",
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension", "review", "diff", "tui", "code-review"],
+  "license": "GPL-3.0-or-later",
+  "files": ["src"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "latest",
+    "@earendil-works/pi-tui": "latest",
+    "@types/bun": "latest",
+    "@types/node": "^22",
+    "typebox": "latest",
+    "typescript": "^5.6"
+  },
+  "pi": {
+    "extensions": ["./src/extensions"]
+  }
+}
