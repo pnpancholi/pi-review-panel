@@ -1,6 +1,7 @@
 import { matchesKey } from "@earendil-works/pi-tui"
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { ReviewPanel, type ReviewFile } from "../panel"
+import { getSnapshotOfWorkingTree, getUntrackedFiles, getChangeSize } from "../git"
 
 const PLACEHOLDER_FILES: ReviewFile[] = [
   { path: "src/main.ts", added: 363, removed: 1 },
@@ -17,11 +18,19 @@ let panelVisible = false
 let panelActive = false
 let inputListenerBound = false
 
+// for quick testing
+let baseline: string | null = null
+let untrackedFilesAtStart: Set<string> = new Set()
+
+
 export default function(pi: ExtensionAPI) {
-  pi.on("session_start", (_event, ctx) => {
-    if (ctx.mode !== "tui" || inputListenerBound) return
-    ctx.ui.onTerminalInput(handleTerminalInput)
-    inputListenerBound = true
+  pi.on("session_start", async (_event, ctx) => {
+    if (ctx.mode === "tui" || !inputListenerBound) {
+      ctx.ui.onTerminalInput(handleTerminalInput)
+      inputListenerBound = true
+    }
+    baseline = await getSnapshotOfWorkingTree(ctx.cwd)
+    untrackedFilesAtStart = new Set(await getUntrackedFiles(ctx.cwd))
   })
 
   pi.on("session_shutdown", (_event, ctx) => {
@@ -31,6 +40,15 @@ export default function(pi: ExtensionAPI) {
     panel = null
     panelVisible = false
     panelActive = false
+  })
+
+  // this helps with hot-reloading the panel content
+  pi.on("tool_execution_end", async (_event, ctx) => {
+    if (!panel || !panelVisible) return
+    //   if (_event.toolName !== "write" && _event.toolName !== "edit" && _event.toolName !== "bash") return
+    const changes = await getChangeSize(ctx.cwd, baseline || "", untrackedFilesAtStart)
+    const files: ReviewFile[] = changes.map(c => ({ path: c.path, added: c.added, removed: c.removed, status: c.status }))
+    panel.setFiles(files)
   })
 
   pi.registerCommand("review", {
@@ -47,9 +65,17 @@ export default function(pi: ExtensionAPI) {
         panelActive = false
         return
       }
+      const changes = await getChangeSize(ctx.cwd, baseline || "", untrackedFilesAtStart)
+      const files: ReviewFile[] = changes.map(c => ({
+        path: c.path,
+        added: c.added,
+        removed: c.removed,
+        status: c.status
+      }))
+
       ctx.ui.setWidget("review", (tui, theme) => {
         panel = new ReviewPanel(theme, tui)
-        panel.setFiles(PLACEHOLDER_FILES)
+        panel.setFiles(files)
         panel.setActive(false)
         panelVisible = true
         return panel
