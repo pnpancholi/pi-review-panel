@@ -1,7 +1,8 @@
-import { execFile } from "child_process";
+import { execFile, execFileSync } from "child_process";
 import { readFile } from "fs/promises";
 import { promisify } from "util";
 import { join } from "path";
+import { getDiffLines } from "./diff";
 
 const execFileAsync = promisify(execFile)
 
@@ -31,6 +32,11 @@ export async function getSnapshotOfWorkingTree(cwd: string): Promise<string | nu
   }
 }
 
+export async function getFileContent(cwd: string, path: string, ref: string): Promise<string> {
+  const { stdout } = await execFileAsync("git", ["show", `${ref}:${path}`], { cwd, maxBuffer: 32 * 1024 * 1024 })
+  return stdout
+}
+
 /**
  * List untracked files in the repo right now.
  *
@@ -50,7 +56,19 @@ export async function getUntrackedFiles(cwd: string): Promise<string[]> {
   }
 }
 
-export async function getChangeSize(cwd: string, baseline: string, untrackedFilesAtStart: Set<string>): Promise<GitChange[]> {
+export async function getUntrackedFilesWithContent(cwd: string): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  for (const path of await getUntrackedFiles(cwd)) {
+    try {
+      map.set(path, await readFile(join(cwd, path), "utf8"))
+    } catch {
+
+    }
+  }
+  return map
+}
+
+export async function getChangeSize(cwd: string, baseline: string, untrackedFilesAtStart: Map<string, string>): Promise<GitChange[]> {
   const ref = baseline.length > 0 ? baseline : "HEAD"
   const changes: GitChange[] = []
 
@@ -75,12 +93,33 @@ export async function getChangeSize(cwd: string, baseline: string, untrackedFile
   }
   // to deal with brand new files created since baseline (untracked, absent at start)
   const untrackedFilesNow = await getUntrackedFiles(cwd)
+  const now = new Set(untrackedFilesNow)
   for (const path of untrackedFilesNow) {
-    if (untrackedFilesAtStart.has(path)) continue
-    changes.push({ path, status: "added", added: await lineCount(cwd, path), removed: 0 })
+    const oldContnt = untrackedFilesAtStart.get(path)
+    if (oldContnt === undefined) {
+      changes.push({ path, status: "added", added: await lineCount(cwd, path), removed: 0 })
+      continue
+    }
+
+    let current = ""
+    try { current = await readFile(join(cwd, path), "utf8") } catch { continue }
+
+    if (current === oldContnt) continue
+    const { added, removed } = getDiffLines(convertToLines(oldContnt), convertToLines(current))
+    changes.push({ path, status: "modified", added, removed })
   }
+  //for pre-existing untracked files that were deleted during the current session
+  for (const path of untrackedFilesAtStart.keys()) {
+    if (now.has(path)) continue
+
+    const { removed } = getDiffLines(convertToLines(untrackedFilesAtStart.get(path) ?? ""), [])
+    changes.push({ path, status: "deleted", added: 0, removed })
+  }
+  //   if (untrackedFilesAtStart.has(path)) continue
+  //   changes.push({ path, status: "added", added: await lineCount(cwd, path), removed: 0 })
   changes.sort((a, b) => a.path.localeCompare(b.path))
   return changes
+
 }
 
 async function lineCount(cwd: string, path: string): Promise<number> {
@@ -90,6 +129,10 @@ async function lineCount(cwd: string, path: string): Promise<number> {
   } catch {
     return 0
   }
+}
+
+function convertToLines(content: string): string[] {
+  return content.length === 0 ? [] : content.split("\n")
 }
 
 

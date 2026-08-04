@@ -1,18 +1,19 @@
 import { matchesKey } from "@earendil-works/pi-tui"
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { ReviewPanel, type ReviewFile } from "../panel"
-import { getSnapshotOfWorkingTree, getUntrackedFiles, getChangeSize } from "../git"
+import { getSnapshotOfWorkingTree, getUntrackedFilesWithContent, getChangeSize } from "../git"
 
-const PLACEHOLDER_FILES: ReviewFile[] = [
-  { path: "src/main.ts", added: 363, removed: 1 },
-  { path: "src/utils.ts", added: 52, removed: 2 },
-  { path: "README.md", added: 10405, removed: 1405 },
-  { path: "LICENSE", added: 343, removed: 100 },
-  { path: "package.json", added: 454, removed: 145 },
-  { path: "package-lock.json", added: 54, removed: 2233 },
-  { path: "biome.json", added: 45, removed: 0 },
-]
 
+// const PLACEHOLDER_FILES: ReviewFile[] = [
+//   { path: "src/main.ts", added: 363, removed: 1 },
+//   { path: "src/utils.ts", added: 52, removed: 2 },
+//   { path: "README.md", added: 10405, removed: 1405 },
+//   { path: "LICENSE", added: 343, removed: 100 },
+//   { path: "package.json", added: 454, removed: 145 },
+//   { path: "package-lock.json", added: 54, removed: 2233 },
+//   { path: "biome.json", added: 45, removed: 0 },
+// ]
+//
 let panel: ReviewPanel | null = null
 let panelVisible = false
 let panelActive = false
@@ -20,17 +21,17 @@ let inputListenerBound = false
 
 // for quick testing
 let baseline: string | null = null
-let untrackedFilesAtStart: Set<string> = new Set()
+let untrackedFilesAtStart: Map<string, string> = new Map()
 
 
 export default function(pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
-    if (ctx.mode === "tui" || !inputListenerBound) {
+    if (ctx.mode === "tui" && !inputListenerBound) {
       ctx.ui.onTerminalInput(handleTerminalInput)
       inputListenerBound = true
     }
     baseline = await getSnapshotOfWorkingTree(ctx.cwd)
-    untrackedFilesAtStart = new Set(await getUntrackedFiles(ctx.cwd))
+    untrackedFilesAtStart = await getUntrackedFilesWithContent(ctx.cwd)
   })
 
   pi.on("session_shutdown", (_event, ctx) => {
@@ -40,6 +41,8 @@ export default function(pi: ExtensionAPI) {
     panel = null
     panelVisible = false
     panelActive = false
+    baseline = null
+    untrackedFilesAtStart = new Map()
   })
 
   // this helps with hot-reloading the panel content
@@ -47,7 +50,7 @@ export default function(pi: ExtensionAPI) {
     if (!panel || !panelVisible) return
     //   if (_event.toolName !== "write" && _event.toolName !== "edit" && _event.toolName !== "bash") return
     const changes = await getChangeSize(ctx.cwd, baseline || "", untrackedFilesAtStart)
-    const files: ReviewFile[] = changes.map(c => ({ path: c.path, added: c.added, removed: c.removed, status: c.status }))
+    const files: ReviewFile[] = changes.map(c => ({ path: c.path, added: c.added, removed: c.removed }))
     panel.setFiles(files)
   })
 
@@ -70,7 +73,6 @@ export default function(pi: ExtensionAPI) {
         path: c.path,
         added: c.added,
         removed: c.removed,
-        status: c.status
       }))
 
       ctx.ui.setWidget("review", (tui, theme) => {
