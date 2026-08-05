@@ -1,4 +1,4 @@
-import type { Theme } from "@earendil-works/pi-coding-agent"
+import { highlightCode, getLanguageFromPath, type Theme } from "@earendil-works/pi-coding-agent"
 import { truncateToWidth, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui"
 
 const GUTTER = 4
@@ -40,7 +40,7 @@ function fitToWidth(text: string, width: number): string {
 function renderPaneCell(lines: string[], index: number, paneWidth: number, gutterWidth: number, theme: Theme): string {
   const lineNumber = String(index + 1).padStart(gutterWidth, " ")
   const content = lines[index] ?? " "
-  return fitToWidth(theme.fg("dim", lineNumber) + " " + theme.fg("muted", content), paneWidth)
+  return fitToWidth(theme.fg("dim", lineNumber) + " " + content, paneWidth)
 }
 
 export class DiffView implements Component {
@@ -55,16 +55,18 @@ export class DiffView implements Component {
     this.theme = theme
     this.tui = tui
     this.path = options.path
-    this.before = options.before
-    this.after = options.after
+    const lang = getLanguageFromPath(this.path)
+    this.before = highlightCode(options.before.join("\n"), lang)
+    this.after = highlightCode(options.after.join("\n"), lang)
   }
 
   invalidate(): void { }
 
   private renderHeader(layout: PaneLayout): string {
-    const left = fitToWidth(this.theme.fg("dim", this.path), layout.leftWidth)
+    const left = fitToWidth(this.theme.fg("dim", ("  " + this.path)), layout.leftWidth)
     const sep = this.theme.fg("borderMuted", " ".repeat(layout.separatorWidth))
-    const right = fitToWidth(this.theme.fg("dim", this.path), layout.rightWidth)
+    const hint = this.theme.fg("muted", "j/k: scroll · PgUp/PgDn: page · Esc: close")
+    const right = fitToWidth(hint, layout.rightWidth)
     return left + sep + right
   }
 
@@ -74,9 +76,9 @@ export class DiffView implements Component {
     const right = renderPaneCell(this.after, this.scroll + i, layout.rightWidth, layout.gutterWidth, this.theme)
     return left + sep + right
   }
-  private renderFooter(width: number): string {
-    return fitToWidth(this.theme.fg("muted", "j/k: scroll | pgUp/pgDown: page scroll | Esc: exit"), width)
-  }
+  // private renderFooter(width: number): string {
+  //   return fitToWidth(this.theme.fg("muted", "j/k: scroll | pgUp/pgDown: page scroll | Esc: exit"), width)
+  // }
 
   private paneHeight(): number {
     return computeLayout(this.tui.terminal.columns, this.tui.terminal.rows).height - 2
@@ -92,16 +94,6 @@ export class DiffView implements Component {
   scrollByPage(count: number): void {
     this.scrollBy(count * this.paneHeight())
   }
-  //
-  // handleInput(key: string): void {
-  //   if (matchesKey(key, "up") || matchesKey(key, "k")) {
-  //     this.scrollBy(-1)
-  //   } else if (matchesKey(key, "down") || matchesKey(key, "j")) {
-  //     this.scrollBy(1)
-  //   } else if (matchesKey(key, "escape")) {
-  //     this.done()
-  //   }
-  // }
 
   render(width: number): string[] {
     const layout = computeLayout(width, this.tui.terminal.rows)
@@ -112,7 +104,7 @@ export class DiffView implements Component {
     for (let i = 0; i < layout.height - 2; i++) {
       lines.push(this.renderRow(i, layout))
     }
-    lines.push(this.renderFooter(width))
+    //    lines.push(this.renderFooter(width))
     return lines
   }
 }
