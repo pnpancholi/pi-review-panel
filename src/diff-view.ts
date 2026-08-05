@@ -1,5 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent"
-import { matchesKey, truncateToWidth, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui"
+import { truncateToWidth, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui"
 
 const GUTTER = 4
 const SEPARATOR = 4
@@ -8,7 +8,6 @@ interface DiffViewOptions {
   path: string
   before: string[]
   after: string[]
-  done: (result?: unknown) => void
 }
 
 interface PaneLayout {
@@ -47,7 +46,6 @@ function renderPaneCell(lines: string[], index: number, paneWidth: number, gutte
 export class DiffView implements Component {
   private readonly theme: Theme
   private readonly tui: TUI
-  private readonly done: () => void
   private readonly path: string
   private before: string[]
   private after: string[]
@@ -56,7 +54,6 @@ export class DiffView implements Component {
   constructor(theme: Theme, tui: TUI, options: DiffViewOptions) {
     this.theme = theme
     this.tui = tui
-    this.done = options.done
     this.path = options.path
     this.before = options.before
     this.after = options.after
@@ -85,22 +82,26 @@ export class DiffView implements Component {
     return computeLayout(this.tui.terminal.columns, this.tui.terminal.rows).height - 2
   }
 
-  private scrollBy(delta: number): void {
+  scrollBy(delta: number): void {
     const n = Math.max(this.before.length, this.after.length)
     const maxScroll = Math.max(0, n - this.paneHeight())
     this.scroll = Math.max(0, Math.min(maxScroll, this.scroll + delta))
     this.tui.requestRender()
   }
 
-  handleInput(key: string): void {
-    if (matchesKey(key, "up") || matchesKey(key, "k")) {
-      this.scrollBy(-1)
-    } else if (matchesKey(key, "down") || matchesKey(key, "j")) {
-      this.scrollBy(1)
-    } else if (matchesKey(key, "escape")) {
-      this.done()
-    }
+  scrollByPage(count: number): void {
+    this.scrollBy(count * this.paneHeight())
   }
+  //
+  // handleInput(key: string): void {
+  //   if (matchesKey(key, "up") || matchesKey(key, "k")) {
+  //     this.scrollBy(-1)
+  //   } else if (matchesKey(key, "down") || matchesKey(key, "j")) {
+  //     this.scrollBy(1)
+  //   } else if (matchesKey(key, "escape")) {
+  //     this.done()
+  //   }
+  // }
 
   render(width: number): string[] {
     const layout = computeLayout(width, this.tui.terminal.rows)

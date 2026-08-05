@@ -1,5 +1,5 @@
 import { matchesKey } from "@earendil-works/pi-tui"
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
+import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent"
 import { ReviewPanel, type ReviewFile } from "../panel"
 import { getSnapshotOfWorkingTree, getUntrackedFilesWithContent, getChangeSize, getFileContent } from "../git"
 import { DiffView } from "../diff-view"
@@ -16,6 +16,12 @@ import { join } from "path"
 //   { path: "biome.json", added: 45, removed: 0 },
 // ]
 //
+let ui: ExtensionUIContext
+let diffView: DiffView | null = null
+let diffPanelVisible = false
+let diffPanelActive = false
+let pendingDiff: { path: string, before: string[], after: string[] } | null = null
+let reviewFiles: ReviewFile[] = []
 let panel: ReviewPanel | null = null
 let panelVisible = false
 let panelActive = false
@@ -28,6 +34,7 @@ let untrackedFilesAtStart: Map<string, string> = new Map()
 
 export default function(pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
+    ui = ctx.ui
     if (ctx.mode === "tui" && !inputListenerBound) {
       ctx.ui.onTerminalInput(handleTerminalInput)
       inputListenerBound = true
@@ -87,7 +94,7 @@ export default function(pi: ExtensionAPI) {
     },
   })
   pi.registerCommand("diff", {
-    description: "load diff view, only for testting",
+    description: "Toggle the session diff panel",
     handler: async (_args, ctx) => {
       if (ctx.mode !== "tui") {
         ctx.ui.notify("/diff requires interactive mode", "error")
@@ -100,9 +107,7 @@ export default function(pi: ExtensionAPI) {
       }
       const file = changes[0]!
       const after = await readFile(join(ctx.cwd, file.path), "utf8")
-
       let before = untrackedFilesAtStart.get(file.path)
-
       if (before === undefined) {
         try {
           before = await getFileContent(ctx.cwd, file.path, baseline || "HEAD")
@@ -110,23 +115,33 @@ export default function(pi: ExtensionAPI) {
           before = ""
         }
       }
-
       const beforeLines = before.length === 0 ? [] : before.split("\n")
       const afterLines = after.length === 0 ? [] : after.split("\n")
-
-      await ctx.ui.custom(
-        (tui, theme, _keybindings, done) =>
-          new DiffView(theme, tui, { path: file.path, before: beforeLines, after: afterLines, done }),
-        {
-          overlay: true,
-          overlayOptions: { width: "100%", row: "0%", maxHeight: "50%" },
-        },
-      )
+      pendingDiff = { path: file.path, before: beforeLines, after: afterLines }
+      diffPanelVisible = true
+      diffPanelActive = true
+      refreshWidgets(ctx.ui)
     }
   })
 }
 
 function handleTerminalInput(data: string): { consume?: boolean } | undefined {
+  //--//
+  if (diffPanelActive && diffView) {
+    if (matchesKey(data, "up") || matchesKey(data, "k")) diffView.scrollBy(-1)
+    else if (matchesKey(data, "down") || matchesKey(data, "j")) diffView.scrollBy(1)
+    else if (matchesKey(data, "pageUp")) diffView.scrollByPage(-1)
+    else if (matchesKey(data, "pageDown")) diffView.scrollByPage(1)
+    else if (matchesKey(data, "escape")) {
+      diffPanelVisible = false; diffPanelActive = false; pendingDiff = null
+      refreshWidgets(ui)
+      panelActive = true; panel?.setActive(true)
+    }
+    else return undefined
+    return { consume: true }
+  }
+
+  //--//
   if (!panelVisible || !panel) return undefined
 
   if (matchesKey(data, "alt+r")) {
@@ -151,4 +166,50 @@ function handleTerminalInput(data: string): { consume?: boolean } | undefined {
     return { consume: true }
   }
   return undefined
+
+
+
 }
+
+
+function refreshWidgets(ui: ExtensionUIContext): void {
+  ui.setWidget("diff", undefined)
+  ui.setWidget("review", undefined)
+
+  if (diffPanelVisible) {
+    ui.setWidget("diff", (tui, theme) => {
+      if (!diffView && pendingDiff) diffView = new DiffView(theme, tui, pendingDiff)
+      return diffView!
+    })
+  }
+
+  if (panelVisible) {
+    ui.setWidget("review", (tui, theme) => {
+      if (!panel) panel = new ReviewPanel(theme, tui)
+      return panel!
+    })
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
