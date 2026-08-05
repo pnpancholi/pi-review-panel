@@ -8,7 +8,7 @@ interface DiffViewOptions {
   path: string
   before: string[]
   after: string[]
-  done: () => void
+  done: (result?: unknown) => void
 }
 
 interface PaneLayout {

@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from "child_process";
+import { execFile } from "child_process";
 import { readFile } from "fs/promises";
 import { promisify } from "util";
 import { join } from "path";

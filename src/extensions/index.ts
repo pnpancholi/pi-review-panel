@@ -1,8 +1,10 @@
 import { matchesKey } from "@earendil-works/pi-tui"
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { ReviewPanel, type ReviewFile } from "../panel"
-import { getSnapshotOfWorkingTree, getUntrackedFilesWithContent, getChangeSize } from "../git"
-
+import { getSnapshotOfWorkingTree, getUntrackedFilesWithContent, getChangeSize, getFileContent } from "../git"
+import { DiffView } from "../diff-view"
+import { readFile } from "fs/promises"
+import { join } from "path"
 
 // const PLACEHOLDER_FILES: ReviewFile[] = [
 //   { path: "src/main.ts", added: 363, removed: 1 },
@@ -83,6 +85,44 @@ export default function(pi: ExtensionAPI) {
         return panel
       })
     },
+  })
+  pi.registerCommand("diff", {
+    description: "load diff view, only for testting",
+    handler: async (_args, ctx) => {
+      if (ctx.mode !== "tui") {
+        ctx.ui.notify("/diff requires interactive mode", "error")
+        return
+      }
+      const changes = await getChangeSize(ctx.cwd, baseline || "", untrackedFilesAtStart)
+      if (changes.length === 0) {
+        ctx.ui.notify("No changed files to show", "warning")
+        return
+      }
+      const file = changes[0]!
+      const after = await readFile(join(ctx.cwd, file.path), "utf8")
+
+      let before = untrackedFilesAtStart.get(file.path)
+
+      if (before === undefined) {
+        try {
+          before = await getFileContent(ctx.cwd, file.path, baseline || "HEAD")
+        } catch {
+          before = ""
+        }
+      }
+
+      const beforeLines = before.length === 0 ? [] : before.split("\n")
+      const afterLines = after.length === 0 ? [] : after.split("\n")
+
+      await ctx.ui.custom(
+        (tui, theme, _keybindings, done) =>
+          new DiffView(theme, tui, { path: file.path, before: beforeLines, after: afterLines, done }),
+        {
+          overlay: true,
+          overlayOptions: { width: "100%", row: "0%", maxHeight: "50%" },
+        },
+      )
+    }
   })
 }
 
