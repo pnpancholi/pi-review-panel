@@ -62,12 +62,21 @@ export class DiffView implements Component {
 
   invalidate(): void { }
 
-  private renderHeader(layout: PaneLayout): string {
-    const left = fitToWidth(this.theme.fg("dim", ("  " + this.path)), layout.leftWidth)
-    const sep = this.theme.fg("borderMuted", " ".repeat(layout.separatorWidth))
-    const hint = this.theme.fg("muted", "j/k: scroll · PgUp/PgDn: page · Esc: close")
-    const right = fitToWidth(hint, layout.rightWidth)
-    return left + sep + right
+  private renderHeader(layout: PaneLayout): string[] {
+    const width = layout.leftWidth + layout.separatorWidth + layout.rightWidth
+    const header = fitToWidth(
+      this.theme.fg("accent", this.theme.bold(" Diff View ")) +
+      " " +
+      this.theme.fg("dim", "-") +
+      " " +
+      this.theme.fg("dim", "j/k: scroll · PgUp/PgDn: page · Esc: close"),
+      width
+    )
+    return [
+      this.theme.bg("selectedBg", header),
+      this.theme.bg("selectedBg", ""),
+      fitToWidth(this.theme.fg("dim", " " + this.path), width)
+    ]
   }
 
   private renderRow(i: number, layout: PaneLayout): string {
@@ -76,12 +85,9 @@ export class DiffView implements Component {
     const right = renderPaneCell(this.after, this.scroll + i, layout.rightWidth, layout.gutterWidth, this.theme)
     return left + sep + right
   }
-  // private renderFooter(width: number): string {
-  //   return fitToWidth(this.theme.fg("muted", "j/k: scroll | pgUp/pgDown: page scroll | Esc: exit"), width)
-  // }
 
   private paneHeight(): number {
-    return computeLayout(this.tui.terminal.columns, this.tui.terminal.rows).height - 2
+    return computeLayout(this.tui.terminal.columns, this.tui.terminal.rows).height - 3
   }
 
   scrollBy(delta: number): void {
@@ -99,12 +105,13 @@ export class DiffView implements Component {
     const layout = computeLayout(width, this.tui.terminal.rows)
     const lines: string[] = []
 
-    lines.push(this.renderHeader(layout))
+    lines.push(...this.renderHeader(layout))
 
-    for (let i = 0; i < layout.height - 2; i++) {
+    for (let i = 0; i < layout.height - 3; i++) {
       lines.push(this.renderRow(i, layout))
     }
-    //    lines.push(this.renderFooter(width))
+    lines.push(this.theme.bg("selectedBg", ""))
+
     return lines
   }
 }

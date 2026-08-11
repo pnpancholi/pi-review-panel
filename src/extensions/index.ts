@@ -6,17 +6,9 @@ import { DiffView } from "../diff-view"
 import { readFile } from "fs/promises"
 import { join } from "path"
 
-// const PLACEHOLDER_FILES: ReviewFile[] = [
-//   { path: "src/main.ts", added: 363, removed: 1 },
-//   { path: "src/utils.ts", added: 52, removed: 2 },
-//   { path: "README.md", added: 10405, removed: 1405 },
-//   { path: "LICENSE", added: 343, removed: 100 },
-//   { path: "package.json", added: 454, removed: 145 },
-//   { path: "package-lock.json", added: 54, removed: 2233 },
-//   { path: "biome.json", added: 45, removed: 0 },
-// ]
-//
+
 let ui: ExtensionUIContext
+let cwd: string | null = null
 let diffView: DiffView | null = null
 let diffPanelVisible = false
 let diffPanelActive = false
@@ -35,6 +27,7 @@ let untrackedFilesAtStart: Map<string, string> = new Map()
 export default function(pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     ui = ctx.ui
+    cwd = ctx.cwd
     if (ctx.mode === "tui" && !inputListenerBound) {
       ctx.ui.onTerminalInput(handleTerminalInput)
       inputListenerBound = true
@@ -51,6 +44,7 @@ export default function(pi: ExtensionAPI) {
     panelVisible = false
     panelActive = false
     baseline = null
+    cwd = null
     untrackedFilesAtStart = new Map()
   })
 
@@ -105,22 +99,7 @@ export default function(pi: ExtensionAPI) {
         ctx.ui.notify("No changed files to show", "warning")
         return
       }
-      const file = changes[0]!
-      const after = await readFile(join(ctx.cwd, file.path), "utf8")
-      let before = untrackedFilesAtStart.get(file.path)
-      if (before === undefined) {
-        try {
-          before = await getFileContent(ctx.cwd, file.path, baseline || "HEAD")
-        } catch {
-          before = ""
-        }
-      }
-      const beforeLines = before.length === 0 ? [] : before.split("\n")
-      const afterLines = after.length === 0 ? [] : after.split("\n")
-      pendingDiff = { path: file.path, before: beforeLines, after: afterLines }
-      diffPanelVisible = true
-      diffPanelActive = true
-      refreshWidgets(ctx.ui)
+      openDiffForFile(changes[0].path)
     }
   })
 }
@@ -165,10 +144,15 @@ function handleTerminalInput(data: string): { consume?: boolean } | undefined {
     panel.setActive(false)
     return { consume: true }
   }
+
+  if (matchesKey(data, "enter") || matchesKey(data, "return")) {
+    const file = panel?.getSelectedFile()
+    if (file) openDiffForFile(file.path)
+    panelActive = false
+    panel?.setActive(false)
+    return { consume: true }
+  }
   return undefined
-
-
-
 }
 
 
@@ -189,6 +173,30 @@ function refreshWidgets(ui: ExtensionUIContext): void {
       return panel!
     })
   }
+}
+
+async function openDiffForFile(path: string): Promise<boolean> {
+  if (!cwd) return false
+
+  const after = await readFile(join(cwd, path), "utf8")
+  let before = untrackedFilesAtStart.get(path)
+  if (before === undefined) {
+    try {
+      before = await getFileContent(cwd, path, baseline || "HEAD")
+    } catch {
+      before = ""
+    }
+  }
+
+  const afterLines = after.length === 0 ? [] : after.split("\n")
+  const beforeLines = before.length === 0 ? [] : before.split("\n")
+
+  pendingDiff = { path: path, before: beforeLines, after: afterLines }
+  diffView = null
+  diffPanelActive = true
+  diffPanelVisible = true
+  refreshWidgets(ui)
+  return true
 }
 
 

@@ -21,3 +21,4 @@ export function getDiffLines(oldLines: string[], newLines: string[]): DiffResult
   const lcs = dp[n]
   return { added: n - lcs, removed: m - lcs }
 }
+
