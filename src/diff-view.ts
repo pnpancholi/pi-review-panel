@@ -1,5 +1,6 @@
 import { highlightCode, getLanguageFromPath, type Theme } from "@earendil-works/pi-coding-agent"
 import { truncateToWidth, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui"
+import { computeDiff, type DiffColor } from "./diff"
 
 const GUTTER = 4
 const SEPARATOR = 4
@@ -37,18 +38,39 @@ function fitToWidth(text: string, width: number): string {
   return sanitized
 }
 
-function renderPaneCell(lines: string[], index: number, paneWidth: number, gutterWidth: number, theme: Theme): string {
+function renderPaneCell(
+  lines: string[],
+  colors: DiffColor[],
+  index: number,
+  paneWidth: number,
+  gutterWidth: number,
+  theme: Theme): string {
   const lineNumber = String(index + 1).padStart(gutterWidth, " ")
   const content = lines[index] ?? " "
-  return fitToWidth(theme.fg("dim", lineNumber) + " " + content, paneWidth)
+  const color = colors[index]
+
+  let styled = content
+
+  if (color === "added") {
+    styled = content === " "
+      ? theme.bg("toolSuccessBg", " ".repeat(paneWidth - gutterWidth - 1))
+      : theme.bg("toolSuccessBg", theme.fg("toolDiffAdded", content))
+  } else if (color === "removed") {
+    styled = content === " "
+      ? theme.bg("toolErrorBg", " ".repeat(paneWidth - gutterWidth - 1))
+      : theme.bg("toolErrorBg", theme.fg("toolDiffRemoved", content))
+  }
+  return fitToWidth(theme.fg("dim", lineNumber) + " " + styled, paneWidth)
 }
 
 export class DiffView implements Component {
   private readonly theme: Theme
   private readonly tui: TUI
   private readonly path: string
-  private before: string[]
-  private after: string[]
+  private leftPane: string[] = []
+  private rightPane: string[] = []
+  private leftColors: DiffColor[] = []
+  private rightColors: DiffColor[] = []
   private scroll = 0
 
   constructor(theme: Theme, tui: TUI, options: DiffViewOptions) {
@@ -56,8 +78,31 @@ export class DiffView implements Component {
     this.tui = tui
     this.path = options.path
     const lang = getLanguageFromPath(this.path)
-    this.before = highlightCode(options.before.join("\n"), lang)
-    this.after = highlightCode(options.after.join("\n"), lang)
+    const beforeHighlighted = highlightCode(options.before.join("\n"), lang)
+    const afterHighlighted = highlightCode(options.after.join("\n"), lang)
+    const diff = computeDiff(beforeHighlighted, afterHighlighted)
+
+    for (const line of diff) {
+      switch (line.type) {
+        case "match":
+          this.leftPane.push(beforeHighlighted[line.oldIdx])
+          this.leftColors.push("match")
+          this.rightPane.push(afterHighlighted[line.newIdx])
+          this.rightColors.push("match")
+          break
+        case "added":
+          this.leftPane.push(" ")
+          this.leftColors.push("added")
+          this.rightPane.push(afterHighlighted[line.idx])
+          this.rightColors.push("added")
+          break
+        case "removed":
+          this.leftPane.push(beforeHighlighted[line.idx])
+          this.leftColors.push("removed")
+          this.rightPane.push(" ")
+          this.rightColors.push("removed")
+      }
+    }
   }
 
   invalidate(): void { }
@@ -80,9 +125,9 @@ export class DiffView implements Component {
   }
 
   private renderRow(i: number, layout: PaneLayout): string {
-    const left = renderPaneCell(this.before, this.scroll + i, layout.leftWidth, layout.gutterWidth, this.theme)
+    const left = renderPaneCell(this.leftPane, this.leftColors, this.scroll + i, layout.leftWidth, layout.gutterWidth, this.theme)
     const sep = this.theme.fg("borderMuted", " ".repeat(layout.separatorWidth))
-    const right = renderPaneCell(this.after, this.scroll + i, layout.rightWidth, layout.gutterWidth, this.theme)
+    const right = renderPaneCell(this.rightPane, this.rightColors, this.scroll + i, layout.rightWidth, layout.gutterWidth, this.theme)
     return left + sep + right
   }
 
@@ -91,7 +136,7 @@ export class DiffView implements Component {
   }
 
   scrollBy(delta: number): void {
-    const n = Math.max(this.before.length, this.after.length)
+    const n = this.leftPane.length
     const maxScroll = Math.max(0, n - this.paneHeight())
     this.scroll = Math.max(0, Math.min(maxScroll, this.scroll + delta))
     this.tui.requestRender()

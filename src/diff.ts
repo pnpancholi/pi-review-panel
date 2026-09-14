@@ -4,12 +4,12 @@
 //    ██║  ██║██║██╔══╝  ██╔══╝      ██╔══╝  ██║╚██╗██║██║   ██║██║██║╚██╗██║██╔══╝  
 //    ██████╔╝██║██║     ██║         ███████╗██║ ╚████║╚██████╔╝██║██║ ╚████║███████╗
 //    ╚═════╝ ╚═╝╚═╝     ╚═╝         ╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝╚══════╝
-
 export type DiffLine =
   { type: "match", oldIdx: number, newIdx: number }
   | { type: "added", idx: number }
   | { type: "removed", idx: number }
 
+export type DiffColor = DiffLine["type"]
 
 export interface DiffResult {
   added: number
