@@ -21,6 +21,9 @@ export class ReviewPanel implements Component {
 
   invalidate(): void { }
 
+  getSelectedFile(): ReviewFile | null {
+    return this.files[this.selected]
+  }
   setFiles(files: ReviewFile[]): void {
     this.files = files
     this.selected = Math.min(this.selected, Math.max(0, files.length - 1))
