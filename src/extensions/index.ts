@@ -87,21 +87,6 @@ export default function(pi: ExtensionAPI) {
       })
     },
   })
-  pi.registerCommand("diff", {
-    description: "Toggle the session diff panel",
-    handler: async (_args, ctx) => {
-      if (ctx.mode !== "tui") {
-        ctx.ui.notify("/diff requires interactive mode", "error")
-        return
-      }
-      const changes = await getChangeSize(ctx.cwd, baseline || "", untrackedFilesAtStart)
-      if (changes.length === 0) {
-        ctx.ui.notify("No changed files to show", "warning")
-        return
-      }
-      openDiffForFile(changes[0].path)
-    }
-  })
 }
 
 function handleTerminalInput(data: string): { consume?: boolean } | undefined {
