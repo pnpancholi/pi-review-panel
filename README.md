@@ -1,5 +1,5 @@
 <div align="center">
-![pi-review-panel](./assets/header.png)
+<img src="./assets/header.png" alt="pi-review-panel">
 
 [![X/Twitter](https://img.shields.io/badge/X-@knowpradhumna-black.svg)](https://x.com/knowpradhumna)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
