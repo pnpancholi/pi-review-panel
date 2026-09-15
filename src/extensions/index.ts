@@ -6,7 +6,6 @@ import { DiffView } from "../diff-view"
 import { readFile } from "fs/promises"
 import { join } from "path"
 
-
 let ui: ExtensionUIContext
 let cwd: string | null = null
 let diffView: DiffView | null = null
