@@ -1,38 +1,38 @@
 import { matchesKey } from "@earendil-works/pi-tui"
 import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent"
 import { ReviewPanel, type ReviewFile } from "../panel"
-import { getSnapshotOfWorkingTree, getUntrackedFilesWithContent, getChangeSize, getFileContent } from "../git"
+import { getChangeSize, getFileContent } from "../git"
 import { DiffView } from "../diff-view"
 import { readFile } from "fs/promises"
 import { join } from "path"
+import { SessionTracker } from "../session"
 
 let ui: ExtensionUIContext
-let cwd: string | null = null
 let diffView: DiffView | null = null
 let diffPanelVisible = false
 let diffPanelActive = false
 let pendingDiff: { path: string, before: string[], after: string[] } | null = null
-let reviewFiles: ReviewFile[] = []
 let panel: ReviewPanel | null = null
 let panelVisible = false
 let panelActive = false
 let inputListenerBound = false
 
-// for quick testing
-let baseline: string | null = null
-let untrackedFilesAtStart: Map<string, string> = new Map()
-
+let sessionTracker = new SessionTracker()
 
 export default function(pi: ExtensionAPI) {
-  pi.on("session_start", async (_event, ctx) => {
+  pi.on("session_start", async (event, ctx) => {
     ui = ctx.ui
-    cwd = ctx.cwd
     if (ctx.mode === "tui" && !inputListenerBound) {
       ctx.ui.onTerminalInput(handleTerminalInput)
       inputListenerBound = true
     }
-    baseline = await getSnapshotOfWorkingTree(ctx.cwd)
-    untrackedFilesAtStart = await getUntrackedFilesWithContent(ctx.cwd)
+    if (event.reason === "resume") {
+      const entries = ctx.sessionManager.getEntries()
+      sessionTracker.restoreFromSnapshot(entries)
+    } else {
+      await sessionTracker.init(ctx)
+      pi.appendEntry("session-snapshot", sessionTracker.getSnapshot())
+    }
   })
 
   pi.on("session_shutdown", (_event, ctx) => {
@@ -42,16 +42,12 @@ export default function(pi: ExtensionAPI) {
     panel = null
     panelVisible = false
     panelActive = false
-    baseline = null
-    cwd = null
-    untrackedFilesAtStart = new Map()
   })
 
   // this helps with hot-reloading the panel content
   pi.on("tool_execution_end", async (_event, ctx) => {
     if (!panel || !panelVisible) return
-    //   if (_event.toolName !== "write" && _event.toolName !== "edit" && _event.toolName !== "bash") return
-    const changes = await getChangeSize(ctx.cwd, baseline || "", untrackedFilesAtStart)
+    const changes = await getChangeSize(ctx.cwd, sessionTracker.getBaseline(), sessionTracker.getUntrackedFilesAtStart())
     const files: ReviewFile[] = changes.map(c => ({ path: c.path, added: c.added, removed: c.removed }))
     panel.setFiles(files)
   })
@@ -70,7 +66,7 @@ export default function(pi: ExtensionAPI) {
         panelActive = false
         return
       }
-      const changes = await getChangeSize(ctx.cwd, baseline || "", untrackedFilesAtStart)
+      const changes = await getChangeSize(ctx.cwd, sessionTracker.getBaseline(), sessionTracker.getUntrackedFilesAtStart())
       const files: ReviewFile[] = changes.map(c => ({
         path: c.path,
         added: c.added,
@@ -160,13 +156,13 @@ function refreshWidgets(ui: ExtensionUIContext): void {
 }
 
 async function openDiffForFile(path: string): Promise<boolean> {
+  const cwd = sessionTracker.getCWD()
   if (!cwd) return false
-
   const after = await readFile(join(cwd, path), "utf8")
-  let before = untrackedFilesAtStart.get(path)
+  let before = sessionTracker.getUntrackedFilesAtStart().get(path)
   if (before === undefined) {
     try {
-      before = await getFileContent(cwd, path, baseline || "HEAD")
+      before = await getFileContent(cwd, path, sessionTracker.getBaseline() || "HEAD")
     } catch {
       before = ""
     }
@@ -182,26 +178,3 @@ async function openDiffForFile(path: string): Promise<boolean> {
   refreshWidgets(ui)
   return true
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -54,8 +54,8 @@ export class SessionTracker {
     }
   }
 
-  getBaseline(): string | null {
-    return this.baseline
+  getBaseline(): string {
+    return this.baseline || ""
   }
 
   getCWD(): string {
