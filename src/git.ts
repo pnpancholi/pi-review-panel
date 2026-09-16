@@ -74,7 +74,7 @@ export async function getChangeSize(cwd: string, baseline: string, untrackedFile
 
   // to deal with tracked changes since baseline
   try {
-    const numStat = await git(cwd, ["diff", "--numstat", ref, "--"])
+    const numStat = await git(cwd, ["diff", "--numstat", "--relative", ref, "--"])
     for (const line of numStat.split("\n")) {
       if (line.length === 0) continue
       const [addedStr, removedStr, ...pathParts] = line.split("\t")
