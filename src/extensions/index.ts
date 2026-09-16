@@ -15,16 +15,14 @@ let pendingDiff: { path: string, before: string[], after: string[] } | null = nu
 let panel: ReviewPanel | null = null
 let panelVisible = false
 let panelActive = false
-let inputListenerBound = false
 
 let sessionTracker = new SessionTracker()
 
 export default function(pi: ExtensionAPI) {
   pi.on("session_start", async (event, ctx) => {
     ui = ctx.ui
-    if (ctx.mode === "tui" && !inputListenerBound) {
+    if (ctx.mode === "tui") {
       ctx.ui.onTerminalInput(handleTerminalInput)
-      inputListenerBound = true
     }
     if (event.reason === "resume") {
       const entries = ctx.sessionManager.getEntries()
@@ -85,8 +83,6 @@ export default function(pi: ExtensionAPI) {
 }
 
 function handleTerminalInput(data: string): { consume?: boolean } | undefined {
-  console.debug("date from handle terminal input", JSON.stringify(data))
-  //--//
   if (diffPanelActive && diffView) {
     if (matchesKey(data, "up") || matchesKey(data, "k")) diffView.scrollBy(-1)
     else if (matchesKey(data, "down") || matchesKey(data, "j")) diffView.scrollBy(1)
@@ -101,7 +97,6 @@ function handleTerminalInput(data: string): { consume?: boolean } | undefined {
     return { consume: true }
   }
 
-  //--//
   if (!panelVisible || !panel) return undefined
 
   if (matchesKey(data, "alt+r")) {
