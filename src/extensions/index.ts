@@ -45,9 +45,24 @@ export default function(pi: ExtensionAPI) {
   // this helps with hot-reloading the panel content
   pi.on("tool_execution_end", async (_event, ctx) => {
     if (!panel || !panelVisible) return
-    const changes = await getChangeSize(ctx.cwd, sessionTracker.getBaseline(), sessionTracker.getUntrackedFilesAtStart())
+    const changes = await getChangeSize(
+      ctx.cwd,
+      sessionTracker.getBaseline(),
+      sessionTracker.getUntrackedFilesAtStart(),
+      sessionTracker.getModifiedFiles()
+    )
     const files: ReviewFile[] = changes.map(c => ({ path: c.path, added: c.added, removed: c.removed }))
     panel.setFiles(files)
+  })
+
+  pi.on("tool_result", async (event, _ctx) => {
+    if (event.isError) return
+    if (event.toolName !== "write" && event.toolName !== "edit") return
+    const path = (event.input as any)?.path as string | undefined
+    if (path) {
+      sessionTracker.trackFile(path)
+      pi.appendEntry("session-snapshot", sessionTracker.getSnapshot())
+    }
   })
 
   pi.registerCommand("review", {
@@ -64,7 +79,12 @@ export default function(pi: ExtensionAPI) {
         panelActive = false
         return
       }
-      const changes = await getChangeSize(ctx.cwd, sessionTracker.getBaseline(), sessionTracker.getUntrackedFilesAtStart())
+      const changes = await getChangeSize(
+        ctx.cwd,
+        sessionTracker.getBaseline(),
+        sessionTracker.getUntrackedFilesAtStart(),
+        sessionTracker.getModifiedFiles()
+      )
       const files: ReviewFile[] = changes.map(c => ({
         path: c.path,
         added: c.added,

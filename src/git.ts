@@ -68,7 +68,12 @@ export async function getUntrackedFilesWithContent(cwd: string): Promise<Map<str
   return map
 }
 
-export async function getChangeSize(cwd: string, baseline: string, untrackedFilesAtStart: Map<string, string>): Promise<GitChange[]> {
+export async function getChangeSize(
+  cwd: string,
+  baseline: string,
+  untrackedFilesAtStart: Map<string, string>,
+  files?: Set<string>
+): Promise<GitChange[]> {
   const ref = baseline.length > 0 ? baseline : "HEAD"
   const changes: GitChange[] = []
 
@@ -115,9 +120,13 @@ export async function getChangeSize(cwd: string, baseline: string, untrackedFile
     const { removed } = getDiffLines(convertToLines(untrackedFilesAtStart.get(path) ?? ""), [])
     changes.push({ path, status: "deleted", added: 0, removed })
   }
+
+  changes.sort((a, b) => a.path.localeCompare(b.path))
   //   if (untrackedFilesAtStart.has(path)) continue
   //   changes.push({ path, status: "added", added: await lineCount(cwd, path), removed: 0 })
-  changes.sort((a, b) => a.path.localeCompare(b.path))
+  if (files) {
+    return changes.filter(c => files.has(c.path))
+  }
   return changes
 
 }
