@@ -85,6 +85,7 @@ export default function(pi: ExtensionAPI) {
 }
 
 function handleTerminalInput(data: string): { consume?: boolean } | undefined {
+  console.debug("date from handle terminal input", JSON.stringify(data))
   //--//
   if (diffPanelActive && diffView) {
     if (matchesKey(data, "up") || matchesKey(data, "k")) diffView.scrollBy(-1)
