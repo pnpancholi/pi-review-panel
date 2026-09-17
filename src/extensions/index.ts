@@ -6,6 +6,7 @@ import { DiffView } from "../diff-view"
 import { readFile } from "fs/promises"
 import { join } from "path"
 import { SessionTracker } from "../session"
+import { getTerminalHintForFontConfig, installNerdFont, isNerdFontInstalled } from "../fonts"
 
 let ui: ExtensionUIContext
 let diffView: DiffView | null = null
@@ -15,11 +16,34 @@ let pendingDiff: { path: string, before: string[], after: string[] } | null = nu
 let panel: ReviewPanel | null = null
 let panelVisible = false
 let panelActive = false
+let hasNerdFontInstalled = false
 
 let sessionTracker = new SessionTracker()
 
 export default function(pi: ExtensionAPI) {
   pi.on("session_start", async (event, ctx) => {
+    // setting up nerd font for a nice look 
+    hasNerdFontInstalled = isNerdFontInstalled()
+    if (!hasNerdFontInstalled && ctx.mode === "tui") {
+      const install = await ctx.ui.confirm(
+        "Nerd Font is missing",
+        "Nerd Font is recommended for better experience, Would you like to install it now?"
+      )
+      if (install) {
+        ctx.ui.setStatus("fonts", "Installing Nerd Font...")
+        const result = await installNerdFont()
+        ctx.ui.notify(result.message, result.success ? "info" : "error")
+        if (result.success) {
+          ctx.ui.notify(getTerminalHintForFontConfig(), "info")
+          hasNerdFontInstalled = true
+        }
+        ctx.ui.setStatus("fonts", undefined)
+      }
+    } else if (hasNerdFontInstalled && ctx.mode === "tui") {
+      ctx.ui.notify("⚠ Nerd Font detected but may not be active in your terminal", "warning")
+      ctx.ui.notify(getTerminalHintForFontConfig(), "info")
+    }
+    // end of nerd font setup
     ui = ctx.ui
     if (ctx.mode === "tui") {
       ctx.ui.onTerminalInput(handleTerminalInput)
@@ -30,6 +54,9 @@ export default function(pi: ExtensionAPI) {
     } else {
       await sessionTracker.init(ctx)
       pi.appendEntry("session-snapshot", sessionTracker.getSnapshot())
+    }
+    if (ctx.mode === "tui") {
+      await openReviewPanel(ctx.ui, ctx.cwd)
     }
   })
 
@@ -77,27 +104,9 @@ export default function(pi: ExtensionAPI) {
         panel = null
         panelVisible = false
         panelActive = false
-        return
+      } else {
+        await openReviewPanel(ctx.ui, ctx.cwd)
       }
-      const changes = await getChangeSize(
-        ctx.cwd,
-        sessionTracker.getBaseline(),
-        sessionTracker.getUntrackedFilesAtStart(),
-        sessionTracker.getModifiedFiles()
-      )
-      const files: ReviewFile[] = changes.map(c => ({
-        path: c.path,
-        added: c.added,
-        removed: c.removed,
-      }))
-
-      ctx.ui.setWidget("review", (tui, theme) => {
-        panel = new ReviewPanel(theme, tui)
-        panel.setFiles(files)
-        panel.setActive(false)
-        panelVisible = true
-        return panel
-      })
     },
   })
 }
@@ -165,10 +174,34 @@ function refreshWidgets(ui: ExtensionUIContext): void {
 
   if (panelVisible) {
     ui.setWidget("review", (tui, theme) => {
-      if (!panel) panel = new ReviewPanel(theme, tui)
+      if (!panel) panel = new ReviewPanel(theme, tui, hasNerdFontInstalled)
       return panel!
     })
   }
+}
+
+async function openReviewPanel(ui: ExtensionUIContext, cwd: string): Promise<void> {
+  if (panelVisible) return
+
+  const changes = await getChangeSize(
+    cwd,
+    sessionTracker.getBaseline(),
+    sessionTracker.getUntrackedFilesAtStart(),
+    sessionTracker.getModifiedFiles()
+  )
+  const files: ReviewFile[] = changes.map(c => ({
+    path: c.path,
+    added: c.added,
+    removed: c.removed,
+  }))
+
+  ui.setWidget("review", (tui, theme) => {
+    panel = new ReviewPanel(theme, tui, hasNerdFontInstalled)
+    panel.setFiles(files)
+    panel.setActive(false)
+    panelVisible = true
+    return panel
+  })
 }
 
 async function openDiffForFile(path: string): Promise<boolean> {

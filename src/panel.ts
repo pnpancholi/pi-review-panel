@@ -1,13 +1,62 @@
 import { truncateToWidth, type Component, type TUI } from "@earendil-works/pi-tui"
 import type { Theme } from "@earendil-works/pi-coding-agent"
 
+
+const MAX_FILE_ROWS = 10
+
+const FILE_ICONS: Record<string, string> = {
+  ts: '', tsx: '',
+  js: '', jsx: '',
+  py: '',
+  go: '',
+  rs: '',
+  java: '',
+  c: '', h: '',
+  cpp: '', hpp: '',
+  rb: '',
+  php: '',
+  swift: '',
+  kt: '',
+  md: '',
+  json: '',
+  yml: '', yaml: '',
+  html: '',
+  css: '',
+  sh: '', bash: '',
+  lua: '',
+  vim: '',
+  sql: '',
+  xml: '',
+  txt: '',
+  //file names
+  'Dockerfile': '',
+  '.gitignore': '',
+  '.gitconfig': '',
+  '.gitmodules': '',
+  '.env': '',
+  '.editorconfig': '',
+  'Makefile': '',
+  'CMakeLists.txt': '',
+}
 export interface ReviewFile {
   path: string
   added: number
   removed: number
 }
 
-const MAX_FILE_ROWS = 10
+function getFileIcon(path: string): string {
+  const filename = path.split("/").pop() || ""
+
+  //edge case handle docker
+  const lowercaseFileName = filename.toLowerCase()
+  if (lowercaseFileName === "dockerfile") return FILE_ICONS["Dockerfile"]
+
+  if (FILE_ICONS[filename]) return FILE_ICONS[filename]
+
+  const ext = filename.split(".").pop()?.toLowerCase() || ""
+  return FILE_ICONS[ext] || ""
+}
+
 
 export class ReviewPanel implements Component {
   private files: ReviewFile[] = []
@@ -17,6 +66,7 @@ export class ReviewPanel implements Component {
   constructor(
     private readonly theme: Theme,
     private readonly tui: TUI,
+    private readonly hasNerdFontInstalled: boolean,
   ) { }
 
   invalidate(): void { }
@@ -50,7 +100,7 @@ export class ReviewPanel implements Component {
     const lineWord = total === 1 ? "line changed" : "lines changed"
     const hint = this.active ? "↑/↓: navigate · Esc: back" : "alt+r: focus panel"
     const title =
-      theme.fg("accent", " Review ") +
+      theme.fg("accent", " Review Panel") +
       theme.fg("dim", `· ${this.files.length} ${fileWord}, ${total} ${lineWord} `)
     lines.push(truncateToWidth(title + "  " + theme.fg("muted", hint), width))
     lines.push(truncateToWidth(theme.fg("borderMuted", "─".repeat(width)), width))
@@ -65,7 +115,8 @@ export class ReviewPanel implements Component {
       if (!file) continue
       const highlighted = this.active && i === this.selected
       const marker = i === this.selected ? "▸" : " "
-      const path = theme.fg(highlighted ? "accent" : i === this.selected ? "text" : "muted", marker + " " + file.path)
+      const icon = this.hasNerdFontInstalled ? getFileIcon(file.path) : ""
+      const path = theme.fg(highlighted ? "accent" : i === this.selected ? "text" : "muted", marker + " " + icon + " " + file.path)
       const stats = theme.fg("success", `+${file.added}`) + " " + theme.fg("error", `−${file.removed}`)
       lines.push(truncateToWidth(path + "  " + stats, width))
     }
