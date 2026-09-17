@@ -6,7 +6,7 @@ import { DiffView } from "../diff-view"
 import { readFile } from "fs/promises"
 import { join } from "path"
 import { SessionTracker } from "../session"
-import { getTerminalHintForFontConfig, installNerdFont, isNerdFontInstalled } from "../fonts"
+import { getTerminalHintForFontConfig, installNerdFont, isNerdFontConfiguredInTerminal, isNerdFontInstalled } from "../fonts"
 
 let ui: ExtensionUIContext
 let diffView: DiffView | null = null
@@ -40,8 +40,11 @@ export default function(pi: ExtensionAPI) {
         ctx.ui.setStatus("fonts", undefined)
       }
     } else if (hasNerdFontInstalled && ctx.mode === "tui") {
-      ctx.ui.notify("⚠ Nerd Font detected but may not be active in your terminal", "warning")
-      ctx.ui.notify(getTerminalHintForFontConfig(), "info")
+      const configured = await isNerdFontConfiguredInTerminal()
+      if (!configured) {
+        ctx.ui.notify("⚠ Nerd Font detected but may not be active in your terminal", "warning")
+        ctx.ui.notify(getTerminalHintForFontConfig(), "info")
+      }
     }
     // end of nerd font setup
     ui = ctx.ui

@@ -2,6 +2,7 @@ import { join } from "node:path"
 import { homedir } from "node:os"
 import { existsSync, readdirSync } from "node:fs"
 import { execSync } from "node:child_process"
+import { readFile } from "node:fs/promises"
 
 function getFontDir(): string {
   return process.platform === "darwin"
@@ -147,11 +148,29 @@ const TERMINAL_INSTRUCTIONS: Record<string, string> = {
   ].join("\n"),
 }
 
+const TERMINAL_CONFIG_PATHS: Record<string, string> = {
+  ghostty: join(homedir(), ".config", "ghostty", "config.ghostty"),
+  kitty: join(homedir(), ".config", "kitty", "kitty.conf"),
+  alacritty: join(homedir(), ".config", "alacritty", "alacritty.toml"),
+  wezterm: join(homedir(), ".config", "wezterm", "wezterm.lua"),
+}
+
 function detectTerminal(): string {
   for (const { name, detect } of TERMINAL_DETECTORS) {
     if (detect()) return name
   }
   return "unknown"
+}
+
+export async function isNerdFontConfiguredInTerminal(): Promise<boolean> {
+  const terminal = detectTerminal()
+  if (!TERMINAL_CONFIG_PATHS[terminal]) return true
+  try {
+    const content = await readFile(TERMINAL_CONFIG_PATHS[terminal], "utf-8")
+    return content.includes("Nerd Font")
+  } catch {
+    return true
+  }
 }
 
 export function getTerminalHintForFontConfig(): string {
