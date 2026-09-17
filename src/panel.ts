@@ -5,38 +5,37 @@ import type { Theme } from "@earendil-works/pi-coding-agent"
 const MAX_FILE_ROWS = 10
 
 const FILE_ICONS: Record<string, string> = {
-  ts: '', tsx: '',
-  js: '', jsx: '',
-  py: '',
-  go: '',
-  rs: '',
-  java: '',
-  c: '', h: '',
-  cpp: '', hpp: '',
-  rb: '',
-  php: '',
-  swift: '',
-  kt: '',
-  md: '',
-  json: '',
-  yml: '', yaml: '',
-  html: '',
-  css: '',
-  sh: '', bash: '',
-  lua: '',
-  vim: '',
-  sql: '',
-  xml: '',
-  txt: '',
-  //file names
-  'Dockerfile': '',
-  '.gitignore': '',
-  '.gitconfig': '',
-  '.gitmodules': '',
-  '.env': '',
-  '.editorconfig': '',
-  'Makefile': '',
-  'CMakeLists.txt': '',
+  ts: '\u{e8ca}', tsx: '\u{e8ca}',
+  js: '\u{e74e}', jsx: '\u{e74e}',
+  py: '\u{e73c}',
+  go: '\u{e627}',
+  rs: '\u{e7a8}',
+  java: '\u{e738}',
+  c: '\u{e61e}', h: '\u{e61e}',
+  cpp: '\u{e61d}', hpp: '\u{e61d}',
+  rb: '\u{e739}',
+  php: '\u{e73d}',
+  swift: '\u{e755}',
+  kt: '\u{e634}',
+  md: '\u{e73e}',
+  json: '\u{e60b}',
+  yml: '\u{e6a8}', yaml: '\u{e6a8}',
+  html: '\u{e736}',
+  css: '\u{e749}',
+  sh: '\u{e795}', bash: '\u{e795}',
+  lua: '\u{e620}',
+  vim: '\u{e62b}',
+  sql: '\u{e7c4}',
+  xml: '\u{e710}',
+  txt: '\u{f15c}',
+  Dockerfile: '\u{e70b}',
+  '.gitignore': '\u{f15c}',
+  '.gitconfig': '\u{f15c}',
+  '.gitmodules': '\u{f15c}',
+  '.env': '\u{f15c}',
+  '.editorconfig': '\u{f15c}',
+  Makefile: '\u{f15c}',
+  'CMakeLists.txt': '\u{f15c}',
 }
 export interface ReviewFile {
   path: string
@@ -101,7 +100,7 @@ export class ReviewPanel implements Component {
     const hint = this.active ? "↑/↓: navigate · Esc: back" : "alt+r: focus panel"
     const title =
       theme.fg("accent", " Review Panel") +
-      theme.fg("dim", `· ${this.files.length} ${fileWord}, ${total} ${lineWord} `)
+      theme.fg("dim", ` - ${this.files.length} ${fileWord}, ${total} ${lineWord} `)
     lines.push(truncateToWidth(title + "  " + theme.fg("muted", hint), width))
     lines.push(truncateToWidth(theme.fg("borderMuted", "─".repeat(width)), width))
 
@@ -115,8 +114,9 @@ export class ReviewPanel implements Component {
       if (!file) continue
       const highlighted = this.active && i === this.selected
       const marker = i === this.selected ? "▸" : " "
-      const icon = this.hasNerdFontInstalled ? getFileIcon(file.path) : ""
-      const path = theme.fg(highlighted ? "accent" : i === this.selected ? "text" : "muted", marker + " " + icon + " " + file.path)
+      let icon = this.hasNerdFontInstalled ? getFileIcon(file.path) : ""
+      icon = icon ? theme.fg("accent", icon) + "  " : ""
+      const path = theme.fg(highlighted ? "accent" : i === this.selected ? "text" : "muted", marker + " " + icon + file.path)
       const stats = theme.fg("success", `+${file.added}`) + " " + theme.fg("error", `−${file.removed}`)
       lines.push(truncateToWidth(path + "  " + stats, width))
     }
