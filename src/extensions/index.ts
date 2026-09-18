@@ -1,4 +1,4 @@
-import { matchesKey } from "@earendil-works/pi-tui"
+import { isKeyRelease, matchesKey } from "@earendil-works/pi-tui"
 import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent"
 import { ReviewPanel, type ReviewFile } from "../panel"
 import { getChangeSize, getFileContent } from "../git"
@@ -115,6 +115,11 @@ export default function(pi: ExtensionAPI) {
 }
 
 function handleTerminalInput(data: string): { consume?: boolean } | undefined {
+  // NOTE: Kitty keyboard protocol sends both press and release events for special keys
+  // (arrows, modifiers). Without this check, the release re-triggers navigation.
+  // this would cause navigation issue with arrow keys if removed
+  if (isKeyRelease(data)) return undefined
+  //--------------------------------------//
   if (diffPanelActive && diffView) {
     if (matchesKey(data, "up") || matchesKey(data, "k")) diffView.scrollBy(-1)
     else if (matchesKey(data, "down") || matchesKey(data, "j")) diffView.scrollBy(1)

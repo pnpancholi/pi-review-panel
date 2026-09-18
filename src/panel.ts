@@ -2,7 +2,7 @@ import { truncateToWidth, type Component, type TUI } from "@earendil-works/pi-tu
 import type { Theme } from "@earendil-works/pi-coding-agent"
 
 
-const MAX_FILE_ROWS = 10
+const MAX_FILE_ROWS = 20
 
 const FILE_ICONS: Record<string, string> = {
   ts: '\u{e8ca}', tsx: '\u{e8ca}',
