@@ -37,11 +37,35 @@ const FILE_ICONS: Record<string, string> = {
   Makefile: '\u{f15c}',
   'CMakeLists.txt': '\u{f15c}',
 }
+
 export interface ReviewFile {
   path: string
   added: number
   removed: number
 }
+
+interface FileGroup {
+  directory: string
+  files: ReviewFile[]
+}
+
+function groupFilesByDirectory(files: ReviewFile[]): FileGroup[] {
+  const groups = new Map<string, ReviewFile[]>()
+
+  for (const file of files) {
+    const parts = file.path.split("/")
+    const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : "."
+    if (!groups.has(dir)) {
+      groups.set(dir, [])
+    }
+    groups.get(dir)!.push(file)
+  }
+
+  return Array.from(groups.entries()).map(([directory, files]) => {
+    return { directory, files }
+  })
+}
+
 
 function getFileIcon(path: string): string {
   const filename = path.split("/").pop() || ""
@@ -108,20 +132,48 @@ export class ReviewPanel implements Component {
       lines.push(truncateToWidth(theme.fg("dim", "  No files changed this session yet."), width))
       return lines
     }
+    const groups = groupFilesByDirectory(this.files)
+    let fileIdx = 0
+    let filesRendered = 0
 
-    for (let i = 0; i < Math.min(this.files.length, MAX_FILE_ROWS); i++) {
-      const file = this.files[i]
-      if (!file) continue
-      const highlighted = this.active && i === this.selected
-      const marker = i === this.selected ? "▸" : " "
-      let icon = this.hasNerdFontInstalled ? getFileIcon(file.path) : ""
-      icon = icon ? theme.fg("accent", icon) + "  " : ""
-      const path = theme.fg(highlighted ? "accent" : i === this.selected ? "text" : "muted", marker + " " + icon + file.path)
-      const stats = theme.fg("success", `+${file.added}`) + " " + theme.fg("error", `−${file.removed}`)
-      lines.push(truncateToWidth(path + "  " + stats, width))
+    for (const group of groups) {
+      if (filesRendered >= MAX_FILE_ROWS) break
+
+      // dir header 
+      const dirIcon = this.hasNerdFontInstalled
+        ? theme.fg("accent", "\u{e5ff}") + " "
+        : " "
+      lines.push(truncateToWidth(
+        theme.fg("dim", "  " + dirIcon + group.directory + "/"),
+        width
+      ))
+
+      //files inside dir
+      for (const file of group.files) {
+        if (filesRendered >= MAX_FILE_ROWS) break
+
+        const highlighted = this.active && fileIdx === this.selected
+        const marker = fileIdx === this.selected ? "▸" : " "
+        let icon = this.hasNerdFontInstalled ? getFileIcon(file.path) : ""
+        icon = icon ? theme.fg("accent", icon) + " " : ""
+        const filename = file.path.split("/").pop() || ""
+        const path = theme.fg(
+          highlighted ? "accent" : "muted",
+          " " + marker + " " + icon + filename
+        )
+        const stats = theme.fg("success", `+${file.added}`) + " " + theme.fg("error", `−${file.removed}`)
+        lines.push(truncateToWidth(path + " " + stats, width))
+        fileIdx++
+        filesRendered++
+      }
     }
-    if (this.files.length > MAX_FILE_ROWS) {
-      lines.push(truncateToWidth(theme.fg("dim", `  … ${this.files.length - MAX_FILE_ROWS} more`), width))
+
+    //handling longer list 
+    if (filesRendered < this.files.length) {
+      lines.push(truncateToWidth(
+        theme.fg("dim", `... ${this.files.length - filesRendered} more files`),
+        width
+      ))
     }
     return lines
   }
