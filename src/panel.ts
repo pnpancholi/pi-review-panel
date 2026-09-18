@@ -1,7 +1,7 @@
 import { truncateToWidth, type Component, type TUI } from "@earendil-works/pi-tui"
 import type { Theme } from "@earendil-works/pi-coding-agent"
 
-const MAX_FILE_ROWS = 20
+const MAX_FILE_ROWS = 15
 
 const FILE_ICONS: Record<string, string> = {
   ts: '\u{e8ca}', tsx: '\u{e8ca}',
@@ -89,8 +89,9 @@ export class ReviewPanel implements Component {
   private selected = 0
   private active = false
 
-  // Viewport state 
-  private scrollOffset = 0
+  // Viewport state - file-centric
+  private firstVisibleFileIdx = 0
+  private fileRenderIndices: (number | undefined)[] = []
   private renderEntries: RenderEntry[] = []
 
   constructor(
@@ -112,23 +113,36 @@ export class ReviewPanel implements Component {
     this.renderEntries = []
     const groups = groupFilesByDirectory(files)
 
+    let flatFileIdx = 0
     for (const group of groups) {
       this.renderEntries.push({ type: "dir", directory: group.directory })
       for (const file of group.files) {
         this.renderEntries.push({
           type: "file",
           file,
-          fileIdx: this.files.indexOf(file),
+          fileIdx: flatFileIdx++,
         })
       }
     }
-    this.scrollOffset = 0
+
+    // Build fileIdx -> renderEntries index mapping
+    this.fileRenderIndices = new Array(files.length)
+    for (let i = 0; i < this.renderEntries.length; i++) {
+      const entry = this.renderEntries[i]
+      if (entry.type === "file") {
+        this.fileRenderIndices[entry.fileIdx] = i
+      }
+    }
+
+    this.firstVisibleFileIdx = 0
     this.tui.requestRender()
   }
 
   moveSelection(delta: number): void {
     if (this.files.length === 0) return
-    this.selected = Math.max(0, Math.min(this.files.length - 1, this.selected + delta))
+    const newSelected = Math.max(0, Math.min(this.files.length - 1, this.selected + delta))
+    if (newSelected === this.selected) return
+    this.selected = newSelected
     this.scrollToSelection()
     this.tui.requestRender()
   }
@@ -145,7 +159,7 @@ export class ReviewPanel implements Component {
     const total = this.files.reduce((sum, f) => sum + f.added + f.removed, 0)
     const fileWord = this.files.length === 1 ? "file modified" : "files modified"
     const lineWord = total === 1 ? "line changed" : "lines changed"
-    const hint = this.active ? "↑/↓: navigate · Esc: back" : "alt+r: focus panel"
+    const hint = this.active ? "↑/↓ | j/k: Navigate · Esc: Back" : "alt+r: focus panel"
     const title =
       theme.fg("accent", " Review Panel") +
       theme.fg("dim", ` - ${this.files.length} ${fileWord}, ${total} ${lineWord} `)
@@ -157,19 +171,22 @@ export class ReviewPanel implements Component {
       return lines
     }
 
-    //Viewport
-    const visible = this.renderEntries.slice(
-      this.scrollOffset,
-      this.scrollOffset + MAX_FILE_ROWS
+    // File-centric viewport: exactly MAX_FILE_ROWS files with their dir headers
+    const lastVisibleFileIdx = Math.min(
+      this.files.length - 1,
+      this.firstVisibleFileIdx + MAX_FILE_ROWS - 1
     )
 
-    const showUpArrow = this.scrollOffset > 0
-    const showDownArrow = this.scrollOffset + MAX_FILE_ROWS < this.renderEntries.length
-
-    // Up arrow indicator
-    if (showUpArrow) {
-      lines.push(truncateToWidth(theme.fg("dim", "  ▲"), width))
+    // Handle edge case where firstVisibleFileIdx is beyond file count
+    if (this.firstVisibleFileIdx >= this.files.length) {
+      this.firstVisibleFileIdx = Math.max(0, this.files.length - MAX_FILE_ROWS)
     }
+
+    const [startRenderIdx, endRenderIdx] = this.getRenderSliceForFiles(
+      this.firstVisibleFileIdx,
+      lastVisibleFileIdx
+    )
+    const visible = this.renderEntries.slice(startRenderIdx, endRenderIdx)
 
     for (const entry of visible) {
       if (entry.type === "dir") {
@@ -195,36 +212,59 @@ export class ReviewPanel implements Component {
       }
     }
 
-
-    // Bottom scroll indicator
-    if (showDownArrow) {
-      lines.push(truncateToWidth(theme.fg("dim", "  ▼"), width))
+    // Bottom scroll indicator: hidden files below last visible file
+    const hiddenFilesBelow = this.files.length - lastVisibleFileIdx - 1
+    if (hiddenFilesBelow > 0) {
+      lines.push(truncateToWidth(
+        theme.fg("dim", `  ... ${hiddenFilesBelow} more file${hiddenFilesBelow === 1 ? "" : "s"}`),
+        width
+      ))
     }
-    //-------------------//
+
     return lines
   }
 
-  private scrollToSelection(): void {
-    // Find the renderEntries index for the currently selected file
-    const selectedRenderIndex = this.renderEntries.findIndex(
-      e => e.type === "file" && e.fileIdx === this.selected
-    )
-    if (selectedRenderIndex === -1) return
+  private getRenderSliceForFiles(firstFileIdx: number, lastFileIdx: number): [number, number] {
+    // Validate inputs
+    if (firstFileIdx > lastFileIdx || firstFileIdx >= this.files.length || lastFileIdx < 0) {
+      return [0, 0]
+    }
 
-    // Scroll down if selection is below viewport
-    if (selectedRenderIndex >= this.scrollOffset + MAX_FILE_ROWS) {
-      this.scrollOffset = selectedRenderIndex - MAX_FILE_ROWS + 1
+    // Clamp to valid range
+    const clampedFirst = Math.max(0, Math.min(firstFileIdx, this.files.length - 1))
+    const clampedLast = Math.max(0, Math.min(lastFileIdx, this.files.length - 1))
+
+    const firstRenderIdx = this.fileRenderIndices[clampedFirst]
+    const lastRenderIdx = this.fileRenderIndices[clampedLast]
+
+    // Mapping should always exist now, but defensive check
+    if (firstRenderIdx === undefined || lastRenderIdx === undefined) {
+      console.warn('[getRenderSliceForFiles] Missing render index mapping')
+      return [0, 0]
     }
-    // Scroll up if selection is above viewport
-    else if (selectedRenderIndex < this.scrollOffset) {
-      this.scrollOffset = selectedRenderIndex
-    }
+
+    // Include preceding dir header for first file
+    const start = (firstRenderIdx > 0 && this.renderEntries[firstRenderIdx - 1].type === "dir")
+      ? firstRenderIdx - 1
+      : firstRenderIdx
+
+    const end = lastRenderIdx + 1
+
+    return [start, end]
   }
 
-  pageBy(delta: number): void {
+  private scrollToSelection(): void {
     if (this.files.length === 0) return
-    this.selected = Math.max(0, Math.min(this.files.length - 1, this.selected + delta))
-    this.scrollToSelection()
-    this.tui.requestRender()
+
+    // Keep selected in [firstVisibleFileIdx, firstVisibleFileIdx + MAX_FILE_ROWS - 1]
+    if (this.selected < this.firstVisibleFileIdx) {
+      this.firstVisibleFileIdx = this.selected
+    } else if (this.selected > this.firstVisibleFileIdx + MAX_FILE_ROWS - 1) {
+      this.firstVisibleFileIdx = this.selected - MAX_FILE_ROWS + 1
+    }
+
+    // Clamp to valid range
+    const maxFirstVisible = Math.max(0, this.files.length - MAX_FILE_ROWS)
+    this.firstVisibleFileIdx = Math.min(this.firstVisibleFileIdx, maxFirstVisible)
   }
 }
