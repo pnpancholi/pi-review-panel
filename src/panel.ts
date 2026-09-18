@@ -1,7 +1,6 @@
 import { truncateToWidth, type Component, type TUI } from "@earendil-works/pi-tui"
 import type { Theme } from "@earendil-works/pi-coding-agent"
 
-
 const MAX_FILE_ROWS = 20
 
 const FILE_ICONS: Record<string, string> = {
@@ -49,6 +48,10 @@ interface FileGroup {
   files: ReviewFile[]
 }
 
+type RenderEntry =
+  | { type: "dir"; directory: string }
+  | { type: "file"; file: ReviewFile; fileIdx: number }
+
 function groupFilesByDirectory(files: ReviewFile[]): FileGroup[] {
   const groups = new Map<string, ReviewFile[]>()
 
@@ -86,6 +89,10 @@ export class ReviewPanel implements Component {
   private selected = 0
   private active = false
 
+  // Viewport state 
+  private scrollOffset = 0
+  private renderEntries: RenderEntry[] = []
+
   constructor(
     private readonly theme: Theme,
     private readonly tui: TUI,
@@ -97,15 +104,32 @@ export class ReviewPanel implements Component {
   getSelectedFile(): ReviewFile | null {
     return this.files[this.selected]
   }
+
   setFiles(files: ReviewFile[]): void {
     this.files = files
     this.selected = Math.min(this.selected, Math.max(0, files.length - 1))
+
+    this.renderEntries = []
+    const groups = groupFilesByDirectory(files)
+
+    for (const group of groups) {
+      this.renderEntries.push({ type: "dir", directory: group.directory })
+      for (const file of group.files) {
+        this.renderEntries.push({
+          type: "file",
+          file,
+          fileIdx: this.files.indexOf(file),
+        })
+      }
+    }
+    this.scrollOffset = 0
     this.tui.requestRender()
   }
 
   moveSelection(delta: number): void {
     if (this.files.length === 0) return
     this.selected = Math.max(0, Math.min(this.files.length - 1, this.selected + delta))
+    this.scrollToSelection()
     this.tui.requestRender()
   }
 
@@ -132,49 +156,75 @@ export class ReviewPanel implements Component {
       lines.push(truncateToWidth(theme.fg("dim", "  No files changed this session yet."), width))
       return lines
     }
-    const groups = groupFilesByDirectory(this.files)
-    let fileIdx = 0
-    let filesRendered = 0
 
-    for (const group of groups) {
-      if (filesRendered >= MAX_FILE_ROWS) break
+    //Viewport
+    const visible = this.renderEntries.slice(
+      this.scrollOffset,
+      this.scrollOffset + MAX_FILE_ROWS
+    )
 
-      // dir header 
-      const dirIcon = this.hasNerdFontInstalled
-        ? theme.fg("accent", "\u{e5ff}") + " "
-        : " "
-      lines.push(truncateToWidth(
-        theme.fg("dim", "  " + dirIcon + group.directory + "/"),
-        width
-      ))
+    const showUpArrow = this.scrollOffset > 0
+    const showDownArrow = this.scrollOffset + MAX_FILE_ROWS < this.renderEntries.length
 
-      //files inside dir
-      for (const file of group.files) {
-        if (filesRendered >= MAX_FILE_ROWS) break
+    // Up arrow indicator
+    if (showUpArrow) {
+      lines.push(truncateToWidth(theme.fg("dim", "  ▲"), width))
+    }
 
-        const highlighted = this.active && fileIdx === this.selected
-        const marker = fileIdx === this.selected ? "▸" : " "
-        let icon = this.hasNerdFontInstalled ? getFileIcon(file.path) : ""
+    for (const entry of visible) {
+      if (entry.type === "dir") {
+        const dirIcon = this.hasNerdFontInstalled
+          ? theme.fg("accent", "\u{e5ff}") + " "
+          : " "
+        lines.push(truncateToWidth(
+          theme.fg("dim", "  " + dirIcon + entry.directory + "/"),
+          width
+        ))
+      } else {
+        const highlighted = this.active && entry.fileIdx === this.selected
+        const marker = entry.fileIdx === this.selected ? "▸" : " "
+        let icon = this.hasNerdFontInstalled ? getFileIcon(entry.file.path) : ""
         icon = icon ? theme.fg("accent", icon) + " " : ""
-        const filename = file.path.split("/").pop() || ""
+        const filename = entry.file.path.split("/").pop() || ""
         const path = theme.fg(
           highlighted ? "accent" : "muted",
           " " + marker + " " + icon + filename
         )
-        const stats = theme.fg("success", `+${file.added}`) + " " + theme.fg("error", `−${file.removed}`)
+        const stats = theme.fg("success", `+${entry.file.added}`) + " " + theme.fg("error", `−${entry.file.removed}`)
         lines.push(truncateToWidth(path + " " + stats, width))
-        fileIdx++
-        filesRendered++
       }
     }
 
-    //handling longer list 
-    if (filesRendered < this.files.length) {
-      lines.push(truncateToWidth(
-        theme.fg("dim", `... ${this.files.length - filesRendered} more files`),
-        width
-      ))
+
+    // Bottom scroll indicator
+    if (showDownArrow) {
+      lines.push(truncateToWidth(theme.fg("dim", "  ▼"), width))
     }
+    //-------------------//
     return lines
+  }
+
+  private scrollToSelection(): void {
+    // Find the renderEntries index for the currently selected file
+    const selectedRenderIndex = this.renderEntries.findIndex(
+      e => e.type === "file" && e.fileIdx === this.selected
+    )
+    if (selectedRenderIndex === -1) return
+
+    // Scroll down if selection is below viewport
+    if (selectedRenderIndex >= this.scrollOffset + MAX_FILE_ROWS) {
+      this.scrollOffset = selectedRenderIndex - MAX_FILE_ROWS + 1
+    }
+    // Scroll up if selection is above viewport
+    else if (selectedRenderIndex < this.scrollOffset) {
+      this.scrollOffset = selectedRenderIndex
+    }
+  }
+
+  pageBy(delta: number): void {
+    if (this.files.length === 0) return
+    this.selected = Math.max(0, Math.min(this.files.length - 1, this.selected + delta))
+    this.scrollToSelection()
+    this.tui.requestRender()
   }
 }
