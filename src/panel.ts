@@ -156,18 +156,40 @@ export class ReviewPanel implements Component {
     const theme = this.theme
     const lines: string[] = []
 
-    const total = this.files.reduce((sum, f) => sum + f.added + f.removed, 0)
-    const fileWord = this.files.length === 1 ? "file modified" : "files modified"
-    const lineWord = total === 1 ? "line changed" : "lines changed"
-    const hint = this.active ? "↑/↓ | j/k: Navigate · Esc: Back" : "alt+r: focus panel"
-    const title =
-      theme.fg("accent", " Review Panel") +
-      theme.fg("dim", ` - ${this.files.length} ${fileWord}, ${total} ${lineWord} `)
-    lines.push(truncateToWidth(title + "  " + theme.fg("muted", hint), width))
+    const totalAdded = this.files.reduce((sum, f) => sum + f.added, 0)
+    const totalRemoved = this.files.reduce((sum, f) => sum + f.removed, 0)
+
+    const pipe = this.hasNerdFontInstalled
+      ? theme.fg("borderMuted", " │ ")
+      : theme.fg("borderMuted", " | ")
+
+    const activeDot = this.active
+      ? theme.fg("accent", " ● ")
+      : theme.fg("muted", " ○ ")
+
+    const title = theme.fg("accent", " Review Panel") + activeDot
+
+    let stats: string
+    let hints: string
+
+    if (this.files.length === 0) {
+      stats = theme.fg("muted", " No changes yet")
+      hints = theme.fg("muted", " alt+r: focus ")
+    } else {
+      stats = theme.fg("accent", ` ${this.files.length} files `) +
+        theme.fg("success", ` +${totalAdded} `) +
+        theme.fg("error", ` −${totalRemoved} `)
+
+      hints = this.active
+        ? theme.fg("muted", " ↑/↓ j/k: navigate  |  Esc: back ")
+        : theme.fg("muted", " alt+r: focus ")
+    }
+
+    const header = [title, stats, hints].join(pipe)
+    lines.push(truncateToWidth(header, width))
     lines.push(truncateToWidth(theme.fg("borderMuted", "─".repeat(width)), width))
 
     if (this.files.length === 0) {
-      lines.push(truncateToWidth(theme.fg("dim", "  No files changed this session yet."), width))
       return lines
     }
 
@@ -201,7 +223,7 @@ export class ReviewPanel implements Component {
         const highlighted = this.active && entry.fileIdx === this.selected
         const marker = entry.fileIdx === this.selected ? "▸" : " "
         let icon = this.hasNerdFontInstalled ? getFileIcon(entry.file.path) : ""
-        icon = icon ? theme.fg("accent", icon) + " " : ""
+        icon = icon ? icon + " " : ""
         const filename = entry.file.path.split("/").pop() || ""
         const path = theme.fg(
           highlighted ? "accent" : "muted",
