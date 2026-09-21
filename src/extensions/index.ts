@@ -85,13 +85,23 @@ export default function(pi: ExtensionAPI) {
     panel.setFiles(files)
   })
 
-  pi.on("tool_result", async (event, _ctx) => {
+  pi.on("tool_result", async (event, ctx) => {
     if (event.isError) return
     if (event.toolName !== "write" && event.toolName !== "edit") return
     const path = (event.input as any)?.path as string | undefined
     if (path) {
       sessionTracker.trackFile(path)
       pi.appendEntry("session-snapshot", sessionTracker.getSnapshot())
+      if (panel && panelVisible) {
+        const changes = await getChangeSize(
+          ctx.cwd,
+          sessionTracker.getBaseline(),
+          sessionTracker.getUntrackedFilesAtStart(),
+          sessionTracker.getModifiedFiles()
+        )
+        const files: ReviewFile[] = changes.map(c => ({ path: c.path, added: c.added, removed: c.removed }))
+        panel.setFiles(files)
+      }
     }
   })
 

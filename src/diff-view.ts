@@ -2,8 +2,8 @@ import { highlightCode, getLanguageFromPath, type Theme } from "@earendil-works/
 import { truncateToWidth, visibleWidth, type Component, type TUI } from "@earendil-works/pi-tui"
 import { computeDiff, type DiffColor } from "./diff"
 
-const GUTTER = 4
 const SEPARATOR = 4
+const DIFF_VISIBLE_LINES = 15
 
 interface DiffViewOptions {
   path: string
@@ -16,18 +16,16 @@ interface PaneLayout {
   leftWidth: number
   rightWidth: number
   separatorWidth: number
-  gutterWidth: number
 }
 
-function computeLayout(width: number, terminalRows: number): PaneLayout {
-  const height = Math.floor(terminalRows / 2)
+function computeLayout(width: number, _terminalRows: number): PaneLayout {
+  const height = DIFF_VISIBLE_LINES
   const leftWidth = Math.floor((width - SEPARATOR) / 2)
   return {
     height,
     leftWidth,
     rightWidth: width - SEPARATOR - leftWidth,
-    separatorWidth: SEPARATOR,
-    gutterWidth: GUTTER
+    separatorWidth: SEPARATOR
   }
 }
 
@@ -43,24 +41,35 @@ function renderPaneCell(
   colors: DiffColor[],
   index: number,
   paneWidth: number,
-  gutterWidth: number,
-  theme: Theme): string {
-  const lineNumber = String(index + 1).padStart(gutterWidth, " ")
+  theme: Theme,
+  isLeftPane: boolean): string {
+  const lineNumber = String(index + 1)
   const content = lines[index] ?? " "
   const color = colors[index]
 
-  let styled = content
+  let gutterMarker = " "
+  if (color === "added") gutterMarker = isLeftPane ? " " : "+"
+  else if (color === "removed") gutterMarker = isLeftPane ? "-" : " "
 
+  const lineNumVisible = visibleWidth(lineNumber)
+  const markerVisible = 1
+  const actualGutterWidth = lineNumVisible + 1 + markerVisible + 1
+
+  let styledContent = content
   if (color === "added") {
-    styled = content === " "
-      ? theme.bg("toolSuccessBg", " ".repeat(paneWidth - gutterWidth - 1))
+    styledContent = !content.trim()
+      ? " ".repeat(Math.max(0, paneWidth - actualGutterWidth))
       : theme.bg("toolSuccessBg", theme.fg("toolDiffAdded", content))
   } else if (color === "removed") {
-    styled = content === " "
-      ? theme.bg("toolErrorBg", " ".repeat(paneWidth - gutterWidth - 1))
+    styledContent = !content.trim()
+      ? " ".repeat(Math.max(0, paneWidth - actualGutterWidth))
       : theme.bg("toolErrorBg", theme.fg("toolDiffRemoved", content))
   }
-  return fitToWidth(theme.fg("dim", lineNumber) + " " + styled, paneWidth)
+
+  const gutter = theme.fg("dim", lineNumber) + " " +
+    theme.fg(color === "added" ? "success" : color === "removed" ? "error" : "muted", gutterMarker) + " "
+
+  return fitToWidth(gutter + styledContent, paneWidth)
 }
 
 export class DiffView implements Component {
@@ -109,25 +118,32 @@ export class DiffView implements Component {
 
   private renderHeader(layout: PaneLayout): string[] {
     const width = layout.leftWidth + layout.separatorWidth + layout.rightWidth
-    const header = fitToWidth(
-      this.theme.fg("accent", this.theme.bold(" Diff View ")) +
-      " " +
-      this.theme.fg("dim", "-") +
-      " " +
-      this.theme.fg("dim", "j/k: scroll · PgUp/PgDn: page · Esc: close"),
-      width
-    )
-    return [
-      this.theme.bg("selectedBg", header),
-      this.theme.bg("selectedBg", ""),
-      fitToWidth(this.theme.fg("dim", " " + this.path), width)
-    ]
+    const lines: string[] = []
+
+    const pipe = this.theme.fg("borderMuted", " | ")
+
+    const title = this.theme.fg("accent", " Diff View")
+
+    const addedCount = this.rightColors.filter(c => c === "added").length
+    const removedCount = this.leftColors.filter(c => c === "removed").length
+
+    const stats = this.theme.fg("accent", ` ${addedCount + removedCount} changes `) +
+      (addedCount > 0 ? this.theme.fg("success", ` +${addedCount} `) : "") +
+      (removedCount > 0 ? this.theme.fg("error", ` -${removedCount} `) : "")
+
+    const hints = this.theme.fg("muted", " j/k: scroll  |  Esc: close ")
+
+    const header = [title, stats, hints].join(pipe)
+    lines.push(truncateToWidth(header, width))
+    lines.push(truncateToWidth(this.theme.fg("borderMuted", "─".repeat(width)), width))
+    lines.push(truncateToWidth(this.theme.fg("dim", " " + this.path), width))
+    return lines
   }
 
   private renderRow(i: number, layout: PaneLayout): string {
-    const left = renderPaneCell(this.leftPane, this.leftColors, this.scroll + i, layout.leftWidth, layout.gutterWidth, this.theme)
-    const sep = this.theme.fg("borderMuted", " ".repeat(layout.separatorWidth))
-    const right = renderPaneCell(this.rightPane, this.rightColors, this.scroll + i, layout.rightWidth, layout.gutterWidth, this.theme)
+    const left = renderPaneCell(this.leftPane, this.leftColors, this.scroll + i, layout.leftWidth, this.theme, true)
+    const sep = this.theme.fg("borderMuted", " | ")
+    const right = renderPaneCell(this.rightPane, this.rightColors, this.scroll + i, layout.rightWidth, this.theme, false)
     return left + sep + right
   }
 
