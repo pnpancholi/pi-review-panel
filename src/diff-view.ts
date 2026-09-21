@@ -9,6 +9,7 @@ interface DiffViewOptions {
   path: string
   before: string[]
   after: string[]
+  hasNerdFontInstalled?: boolean
 }
 
 interface PaneLayout {
@@ -116,11 +117,13 @@ export class DiffView implements Component {
   private rightColors: DiffColor[] = []
   private scroll = 0
   private scrollX = 0
+  private readonly hasNerdFont: boolean
 
   constructor(theme: Theme, tui: TUI, options: DiffViewOptions) {
     this.theme = theme
     this.tui = tui
     this.path = options.path
+    this.hasNerdFont = options.hasNerdFontInstalled ?? false
     const lang = getLanguageFromPath(this.path)
     const beforeHighlighted = highlightCode(options.before.join("\n"), lang)
     const afterHighlighted = highlightCode(options.after.join("\n"), lang)
@@ -155,7 +158,9 @@ export class DiffView implements Component {
     const width = layout.leftWidth + layout.separatorWidth + layout.rightWidth
     const lines: string[] = []
 
-    const pipe = this.theme.fg("borderMuted", " | ")
+    const pipe = this.hasNerdFont
+      ? this.theme.fg("borderMuted", " │ ")
+      : this.theme.fg("borderMuted", " | ")
 
     const title = this.theme.fg("accent", " Diff View")
 
@@ -166,7 +171,9 @@ export class DiffView implements Component {
       (addedCount > 0 ? this.theme.fg("success", ` +${addedCount} `) : "") +
       (removedCount > 0 ? this.theme.fg("error", ` -${removedCount} `) : "")
 
-    const hints = this.theme.fg("muted", " j/k: v-scroll | h/l: h-scroll | Esc: close ")
+    const hints = this.hasNerdFont
+      ? this.theme.fg("muted", " ↑↓/j/k : v-scroll │ ←→/h/l : h-scroll │ Esc : close ")
+      : this.theme.fg("muted", " ↑↓/j/k : v-scroll | ←→/h/l : h-scroll | Esc : close ")
 
     const header = [title, stats, hints].join(pipe)
     lines.push(truncateToWidth(header, width))

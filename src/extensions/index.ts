@@ -187,7 +187,7 @@ function refreshWidgets(ui: ExtensionUIContext): void {
 
   if (diffPanelVisible) {
     ui.setWidget("diff", (tui, theme) => {
-      if (!diffView && pendingDiff) diffView = new DiffView(theme, tui, pendingDiff)
+      if (!diffView && pendingDiff) diffView = new DiffView(theme, tui, { ...pendingDiff, hasNerdFontInstalled })
       return diffView!
     })
   }
