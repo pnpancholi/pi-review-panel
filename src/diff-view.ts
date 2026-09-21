@@ -93,11 +93,11 @@ function renderPaneCell(
   if (color === "added") {
     styledContent = !content.trim()
       ? " ".repeat(Math.max(0, paneWidth - actualGutterWidth))
-      : theme.bg("toolSuccessBg", theme.fg("toolDiffAdded", content))
+      : theme.bg("toolSuccessBg", content)
   } else if (color === "removed") {
     styledContent = !content.trim()
       ? " ".repeat(Math.max(0, paneWidth - actualGutterWidth))
-      : theme.bg("toolErrorBg", theme.fg("toolDiffRemoved", content))
+      : theme.bg("toolErrorBg", content)
   }
 
   const gutter = theme.fg("dim", lineNumber) + " " +
