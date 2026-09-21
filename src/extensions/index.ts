@@ -135,6 +135,8 @@ function handleTerminalInput(data: string): { consume?: boolean } | undefined {
     else if (matchesKey(data, "down") || matchesKey(data, "j")) diffView.scrollBy(1)
     else if (matchesKey(data, "pageUp")) diffView.scrollByPage(-1)
     else if (matchesKey(data, "pageDown")) diffView.scrollByPage(1)
+    else if (matchesKey(data, "left") || matchesKey(data, "h")) diffView.scrollByX(-5)
+    else if (matchesKey(data, "right") || matchesKey(data, "l")) diffView.scrollByX(5)
     else if (matchesKey(data, "escape")) {
       diffPanelVisible = false; diffPanelActive = false; pendingDiff = null
       refreshWidgets(ui)

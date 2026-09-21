@@ -3,7 +3,7 @@ import { truncateToWidth, visibleWidth, type Component, type TUI } from "@earend
 import { computeDiff, type DiffColor } from "./diff"
 
 const SEPARATOR = 4
-const DIFF_VISIBLE_LINES = 15
+const DIFF_VISIBLE_LINES = 20
 
 interface DiffViewOptions {
   path: string
@@ -36,13 +36,46 @@ function fitToWidth(text: string, width: number): string {
   return sanitized
 }
 
+// Slice a string starting from `offset` visible characters, preserving ANSI escape sequences
+function sliceFromVisibleOffset(str: string, offset: number): string {
+  let visibleCount = 0
+  let inEscape = false
+  let result = ""
+  let pendingAnsi = ""
+
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i]
+    if (ch === "\x1b") {
+      inEscape = true
+      pendingAnsi += ch
+      continue
+    }
+    if (inEscape) {
+      pendingAnsi += ch
+      if ((ch >= "A" && ch <= "Z") || (ch >= "a" && ch <= "z")) {
+        inEscape = false
+      }
+      continue
+    }
+    if (visibleCount >= offset) {
+      if (visibleCount === offset) {
+        result = pendingAnsi
+      }
+      result += ch
+    }
+    visibleCount++
+  }
+  return result
+}
+
 function renderPaneCell(
   lines: string[],
   colors: DiffColor[],
   index: number,
   paneWidth: number,
   theme: Theme,
-  isLeftPane: boolean): string {
+  isLeftPane: boolean,
+  scrollX: number = 0): string {
   const lineNumber = String(index + 1)
   const content = lines[index] ?? " "
   const color = colors[index]
@@ -69,7 +102,8 @@ function renderPaneCell(
   const gutter = theme.fg("dim", lineNumber) + " " +
     theme.fg(color === "added" ? "success" : color === "removed" ? "error" : "muted", gutterMarker) + " "
 
-  return fitToWidth(gutter + styledContent, paneWidth)
+  const scrolledContent = sliceFromVisibleOffset(styledContent, scrollX)
+  return fitToWidth(gutter + scrolledContent, paneWidth)
 }
 
 export class DiffView implements Component {
@@ -81,6 +115,7 @@ export class DiffView implements Component {
   private leftColors: DiffColor[] = []
   private rightColors: DiffColor[] = []
   private scroll = 0
+  private scrollX = 0
 
   constructor(theme: Theme, tui: TUI, options: DiffViewOptions) {
     this.theme = theme
@@ -131,7 +166,7 @@ export class DiffView implements Component {
       (addedCount > 0 ? this.theme.fg("success", ` +${addedCount} `) : "") +
       (removedCount > 0 ? this.theme.fg("error", ` -${removedCount} `) : "")
 
-    const hints = this.theme.fg("muted", " j/k: scroll  |  Esc: close ")
+    const hints = this.theme.fg("muted", " j/k: v-scroll | h/l: h-scroll | Esc: close ")
 
     const header = [title, stats, hints].join(pipe)
     lines.push(truncateToWidth(header, width))
@@ -141,9 +176,9 @@ export class DiffView implements Component {
   }
 
   private renderRow(i: number, layout: PaneLayout): string {
-    const left = renderPaneCell(this.leftPane, this.leftColors, this.scroll + i, layout.leftWidth, this.theme, true)
+    const left = renderPaneCell(this.leftPane, this.leftColors, this.scroll + i, layout.leftWidth, this.theme, true, this.scrollX)
     const sep = this.theme.fg("borderMuted", " | ")
-    const right = renderPaneCell(this.rightPane, this.rightColors, this.scroll + i, layout.rightWidth, this.theme, false)
+    const right = renderPaneCell(this.rightPane, this.rightColors, this.scroll + i, layout.rightWidth, this.theme, false, this.scrollX)
     return left + sep + right
   }
 
@@ -160,6 +195,18 @@ export class DiffView implements Component {
 
   scrollByPage(count: number): void {
     this.scrollBy(count * this.paneHeight())
+  }
+
+  scrollByX(delta: number): void {
+    let maxContentWidth = 0
+    for (const line of this.leftPane) {
+      const w = visibleWidth(line)
+      if (w > maxContentWidth) maxContentWidth = w
+    }
+    const paneContentWidth = computeLayout(this.tui.terminal.columns, this.tui.terminal.rows).leftWidth - 6
+    const maxScrollX = Math.max(0, maxContentWidth - paneContentWidth)
+    this.scrollX = Math.max(0, Math.min(maxScrollX, this.scrollX + delta))
+    this.tui.requestRender()
   }
 
   render(width: number): string[] {
