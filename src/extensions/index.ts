@@ -1,5 +1,5 @@
-import { isKeyRelease, matchesKey } from "@earendil-works/pi-tui"
-import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent"
+import { isKeyRelease, matchesKey, type TUI } from "@earendil-works/pi-tui"
+import type { ExtensionAPI, ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent"
 import { ReviewPanel, type ReviewFile } from "../panel"
 import { getChangeSize, getFileContent } from "../git"
 import { DiffView } from "../diff-view"
@@ -17,8 +17,30 @@ let panel: ReviewPanel | null = null
 let panelVisible = false
 let panelActive = false
 let hasNerdFontInstalled = false
+let selectedFilePath: string | null = null
 
 let sessionTracker = new SessionTracker()
+
+async function updatePanelFiles(): Promise<void> {
+  if (!panel) return
+  const changes = await getChangeSize(
+    sessionTracker.getCWD(),
+    sessionTracker.getBaseline(),
+    sessionTracker.getUntrackedFilesAtStart(),
+    sessionTracker.getModifiedFiles()
+  )
+  const files: ReviewFile[] = changes.map(c => ({ path: c.path, added: c.added, removed: c.removed }))
+  panel.setFiles(files)
+  if (selectedFilePath) panel.setSelectedFilePath(selectedFilePath)
+}
+
+function createReviewWidget(tui: TUI, theme: Theme): ReviewPanel {
+  if (!panel) {
+    panel = new ReviewPanel(theme, tui, hasNerdFontInstalled)
+    updatePanelFiles().catch(console.error)
+  }
+  return panel
+}
 
 export default function(pi: ExtensionAPI) {
   pi.on("session_start", async (event, ctx) => {
@@ -70,37 +92,26 @@ export default function(pi: ExtensionAPI) {
     panel = null
     panelVisible = false
     panelActive = false
+    selectedFilePath = null
   })
 
   // this helps with hot-reloading the panel content
   pi.on("tool_execution_end", async (_event, ctx) => {
     if (!panel || !panelVisible) return
-    const changes = await getChangeSize(
-      ctx.cwd,
-      sessionTracker.getBaseline(),
-      sessionTracker.getUntrackedFilesAtStart(),
-      sessionTracker.getModifiedFiles()
-    )
-    const files: ReviewFile[] = changes.map(c => ({ path: c.path, added: c.added, removed: c.removed }))
-    panel.setFiles(files)
+    await updatePanelFiles()
   })
 
   pi.on("tool_result", async (event, ctx) => {
     if (event.isError) return
     if (event.toolName !== "write" && event.toolName !== "edit") return
-    const path = (event.input as any)?.path as string | undefined
-    if (path) {
+    const rawPath = (event.input as any)?.path as string | undefined
+    if (rawPath) {
+      // Normalize path to be relative to cwd (git diff --relative uses relative paths)
+      const path = rawPath.startsWith(ctx.cwd) ? rawPath.slice(ctx.cwd.length + 1) : rawPath
       sessionTracker.trackFile(path)
       pi.appendEntry("session-snapshot", sessionTracker.getSnapshot())
       if (panel && panelVisible) {
-        const changes = await getChangeSize(
-          ctx.cwd,
-          sessionTracker.getBaseline(),
-          sessionTracker.getUntrackedFilesAtStart(),
-          sessionTracker.getModifiedFiles()
-        )
-        const files: ReviewFile[] = changes.map(c => ({ path: c.path, added: c.added, removed: c.removed }))
-        panel.setFiles(files)
+        await updatePanelFiles()
       }
     }
   })
@@ -117,6 +128,7 @@ export default function(pi: ExtensionAPI) {
         panel = null
         panelVisible = false
         panelActive = false
+        selectedFilePath = null
       } else {
         await openReviewPanel(ctx.ui, ctx.cwd)
       }
@@ -158,10 +170,12 @@ function handleTerminalInput(data: string): { consume?: boolean } | undefined {
 
   if (matchesKey(data, "up") || matchesKey(data, "k")) {
     panel.moveSelection(-1)
+    selectedFilePath = panel.getSelectedFile()?.path ?? null
     return { consume: true }
   }
   if (matchesKey(data, "down") || matchesKey(data, "j")) {
     panel.moveSelection(1)
+    selectedFilePath = panel.getSelectedFile()?.path ?? null
     return { consume: true }
   }
   if (matchesKey(data, "escape")) {
@@ -193,41 +207,27 @@ function refreshWidgets(ui: ExtensionUIContext): void {
   }
 
   if (panelVisible) {
-    ui.setWidget("review", (tui, theme) => {
-      if (!panel) panel = new ReviewPanel(theme, tui, hasNerdFontInstalled)
-      return panel!
-    })
+    ui.setWidget("review", createReviewWidget)
   }
 }
 
 async function openReviewPanel(ui: ExtensionUIContext, cwd: string): Promise<void> {
   if (panelVisible) return
-
-  const changes = await getChangeSize(
-    cwd,
-    sessionTracker.getBaseline(),
-    sessionTracker.getUntrackedFilesAtStart(),
-    sessionTracker.getModifiedFiles()
-  )
-  const files: ReviewFile[] = changes.map(c => ({
-    path: c.path,
-    added: c.added,
-    removed: c.removed,
-  }))
-
-  ui.setWidget("review", (tui, theme) => {
-    panel = new ReviewPanel(theme, tui, hasNerdFontInstalled)
-    panel.setFiles(files)
-    panel.setActive(false)
-    panelVisible = true
-    return panel
-  })
+  panelVisible = true
+  ui.setWidget("review", createReviewWidget)
 }
 
 async function openDiffForFile(path: string): Promise<boolean> {
   const cwd = sessionTracker.getCWD()
   if (!cwd) return false
-  const after = await readFile(join(cwd, path), "utf8")
+  
+  let after = ""
+  try {
+    after = await readFile(join(cwd, path), "utf8")
+  } catch {
+    after = ""
+  }
+  
   let before = sessionTracker.getUntrackedFilesAtStart().get(path)
   if (before === undefined) {
     try {

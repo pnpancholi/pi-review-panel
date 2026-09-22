@@ -87,6 +87,7 @@ function getFileIcon(path: string): string {
 export class ReviewPanel implements Component {
   private files: ReviewFile[] = []
   private selected = 0
+  private selectedFilePath: string | null = null
   private active = false
 
   // Viewport state - file-centric
@@ -102,13 +103,35 @@ export class ReviewPanel implements Component {
 
   invalidate(): void { }
 
+  setSelectedFilePath(path: string): void {
+    this.selectedFilePath = path
+    const idx = this.files.findIndex(f => f.path === path)
+    if (idx >= 0) {
+      this.selected = idx
+    }
+  }
+
   getSelectedFile(): ReviewFile | null {
-    return this.files[this.selected]
+    return this.selectedFilePath
+      ? this.files.find(f => f.path === this.selectedFilePath) ?? null
+      : this.files[this.selected] ?? null
   }
 
   setFiles(files: ReviewFile[]): void {
     this.files = files
-    this.selected = Math.min(this.selected, Math.max(0, files.length - 1))
+
+    // Restore selection by file path
+    if (this.selectedFilePath) {
+      const idx = files.findIndex(f => f.path === this.selectedFilePath)
+      if (idx >= 0) {
+        this.selected = idx
+      } else {
+        this.selected = 0
+        this.selectedFilePath = null
+      }
+    } else {
+      this.selected = Math.min(this.selected, Math.max(0, files.length - 1))
+    }
 
     this.renderEntries = []
     const groups = groupFilesByDirectory(files)
@@ -143,6 +166,7 @@ export class ReviewPanel implements Component {
     const newSelected = Math.max(0, Math.min(this.files.length - 1, this.selected + delta))
     if (newSelected === this.selected) return
     this.selected = newSelected
+    this.selectedFilePath = this.files[newSelected]?.path ?? null
     this.scrollToSelection()
     this.tui.requestRender()
   }
