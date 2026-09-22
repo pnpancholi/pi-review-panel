@@ -1,8 +1,7 @@
 import { truncateToWidth, type Component, type TUI } from "@earendil-works/pi-tui"
 import type { Theme } from "@earendil-works/pi-coding-agent"
 
-
-const MAX_FILE_ROWS = 10
+const MAX_FILE_ROWS = 8
 
 const FILE_ICONS: Record<string, string> = {
   ts: '\u{e8ca}', tsx: '\u{e8ca}',
@@ -37,11 +36,39 @@ const FILE_ICONS: Record<string, string> = {
   Makefile: '\u{f15c}',
   'CMakeLists.txt': '\u{f15c}',
 }
+
 export interface ReviewFile {
   path: string
   added: number
   removed: number
 }
+
+interface FileGroup {
+  directory: string
+  files: ReviewFile[]
+}
+
+type RenderEntry =
+  | { type: "dir"; directory: string }
+  | { type: "file"; file: ReviewFile; fileIdx: number }
+
+function groupFilesByDirectory(files: ReviewFile[]): FileGroup[] {
+  const groups = new Map<string, ReviewFile[]>()
+
+  for (const file of files) {
+    const parts = file.path.split("/")
+    const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : "."
+    if (!groups.has(dir)) {
+      groups.set(dir, [])
+    }
+    groups.get(dir)!.push(file)
+  }
+
+  return Array.from(groups.entries()).map(([directory, files]) => {
+    return { directory, files }
+  })
+}
+
 
 function getFileIcon(path: string): string {
   const filename = path.split("/").pop() || ""
@@ -60,7 +87,13 @@ function getFileIcon(path: string): string {
 export class ReviewPanel implements Component {
   private files: ReviewFile[] = []
   private selected = 0
+  private selectedFilePath: string | null = null
   private active = false
+
+  // Viewport state - file-centric
+  private firstVisibleFileIdx = 0
+  private fileRenderIndices: (number | undefined)[] = []
+  private renderEntries: RenderEntry[] = []
 
   constructor(
     private readonly theme: Theme,
@@ -70,18 +103,72 @@ export class ReviewPanel implements Component {
 
   invalidate(): void { }
 
-  getSelectedFile(): ReviewFile | null {
-    return this.files[this.selected]
+  setSelectedFilePath(path: string): void {
+    this.selectedFilePath = path
+    const idx = this.files.findIndex(f => f.path === path)
+    if (idx >= 0) {
+      this.selected = idx
+    }
   }
+
+  getSelectedFile(): ReviewFile | null {
+    return this.selectedFilePath
+      ? this.files.find(f => f.path === this.selectedFilePath) ?? null
+      : this.files[this.selected] ?? null
+  }
+
   setFiles(files: ReviewFile[]): void {
-    this.files = files
-    this.selected = Math.min(this.selected, Math.max(0, files.length - 1))
+    // Group files by directory first, then flatten so this.files matches visual order exactly
+    const groups = groupFilesByDirectory(files)
+    this.files = groups.flatMap(g => g.files)
+
+    // Restore selection by file path using the newly ordered this.files
+    if (this.selectedFilePath) {
+      const idx = this.files.findIndex(f => f.path === this.selectedFilePath)
+      if (idx >= 0) {
+        this.selected = idx
+      } else {
+        this.selected = 0
+        this.selectedFilePath = null
+      }
+    } else {
+      this.selected = Math.min(this.selected, Math.max(0, this.files.length - 1))
+    }
+
+    this.renderEntries = []
+
+    let flatFileIdx = 0
+    for (const group of groups) {
+      this.renderEntries.push({ type: "dir", directory: group.directory })
+      for (const file of group.files) {
+        this.renderEntries.push({
+          type: "file",
+          file,
+          fileIdx: flatFileIdx++,
+        })
+      }
+    }
+
+    // Build fileIdx -> renderEntries index mapping
+    this.fileRenderIndices = new Array(this.files.length)
+    for (let i = 0; i < this.renderEntries.length; i++) {
+      const entry = this.renderEntries[i]
+      if (entry.type === "file") {
+        this.fileRenderIndices[entry.fileIdx] = i
+      }
+    }
+
+    this.firstVisibleFileIdx = 0
     this.tui.requestRender()
   }
 
   moveSelection(delta: number): void {
     if (this.files.length === 0) return
-    this.selected = Math.max(0, Math.min(this.files.length - 1, this.selected + delta))
+    const newSelected = Math.max(0, Math.min(this.files.length - 1, this.selected + delta))
+    if (newSelected === this.selected) return
+    this.selected = newSelected
+    this.selectedFilePath = this.files[newSelected]?.path ?? null
+    this.scrollToSelection()
     this.tui.requestRender()
   }
 
@@ -94,35 +181,137 @@ export class ReviewPanel implements Component {
     const theme = this.theme
     const lines: string[] = []
 
-    const total = this.files.reduce((sum, f) => sum + f.added + f.removed, 0)
-    const fileWord = this.files.length === 1 ? "file modified" : "files modified"
-    const lineWord = total === 1 ? "line changed" : "lines changed"
-    const hint = this.active ? "↑/↓: navigate · Esc: back" : "alt+r: focus panel"
-    const title =
-      theme.fg("accent", " Review Panel") +
-      theme.fg("dim", ` - ${this.files.length} ${fileWord}, ${total} ${lineWord} `)
-    lines.push(truncateToWidth(title + "  " + theme.fg("muted", hint), width))
+    const totalAdded = this.files.reduce((sum, f) => sum + f.added, 0)
+    const totalRemoved = this.files.reduce((sum, f) => sum + f.removed, 0)
+
+    const pipe = this.hasNerdFontInstalled
+      ? theme.fg("borderMuted", " │ ")
+      : theme.fg("borderMuted", " | ")
+
+    const activeDot = this.active
+      ? theme.fg("accent", " ● ")
+      : theme.fg("muted", " ○ ")
+
+    const title = theme.fg("accent", " Review Panel") + activeDot
+
+    let stats: string
+    let hints: string
+
+    if (this.files.length === 0) {
+      stats = theme.fg("muted", " No changes yet")
+      hints = theme.fg("muted", " alt+r: focus ")
+    } else {
+      stats = theme.fg("accent", ` ${this.files.length} files `) +
+        theme.fg("success", ` +${totalAdded} `) +
+        theme.fg("error", ` −${totalRemoved} `)
+
+      hints = this.active
+        ? theme.fg("muted", " ↑/↓ j/k: navigate  |  Esc: back ")
+        : theme.fg("muted", " alt+r: focus ")
+    }
+
+    const header = [title, stats, hints].join(pipe)
+    lines.push(truncateToWidth(header, width))
     lines.push(truncateToWidth(theme.fg("borderMuted", "─".repeat(width)), width))
 
     if (this.files.length === 0) {
-      lines.push(truncateToWidth(theme.fg("dim", "  No files changed this session yet."), width))
       return lines
     }
 
-    for (let i = 0; i < Math.min(this.files.length, MAX_FILE_ROWS); i++) {
-      const file = this.files[i]
-      if (!file) continue
-      const highlighted = this.active && i === this.selected
-      const marker = i === this.selected ? "▸" : " "
-      let icon = this.hasNerdFontInstalled ? getFileIcon(file.path) : ""
-      icon = icon ? theme.fg("accent", icon) + "  " : ""
-      const path = theme.fg(highlighted ? "accent" : i === this.selected ? "text" : "muted", marker + " " + icon + file.path)
-      const stats = theme.fg("success", `+${file.added}`) + " " + theme.fg("error", `−${file.removed}`)
-      lines.push(truncateToWidth(path + "  " + stats, width))
+    // File-centric viewport: exactly MAX_FILE_ROWS files with their dir headers
+    const lastVisibleFileIdx = Math.min(
+      this.files.length - 1,
+      this.firstVisibleFileIdx + MAX_FILE_ROWS - 1
+    )
+
+    // Handle edge case where firstVisibleFileIdx is beyond file count
+    if (this.firstVisibleFileIdx >= this.files.length) {
+      this.firstVisibleFileIdx = Math.max(0, this.files.length - MAX_FILE_ROWS)
     }
-    if (this.files.length > MAX_FILE_ROWS) {
-      lines.push(truncateToWidth(theme.fg("dim", `  … ${this.files.length - MAX_FILE_ROWS} more`), width))
+
+    const [startRenderIdx, endRenderIdx] = this.getRenderSliceForFiles(
+      this.firstVisibleFileIdx,
+      lastVisibleFileIdx
+    )
+    const visible = this.renderEntries.slice(startRenderIdx, endRenderIdx)
+
+    for (const entry of visible) {
+      if (entry.type === "dir") {
+        const dirIcon = this.hasNerdFontInstalled
+          ? theme.fg("accent", "\u{e5ff}") + " "
+          : " "
+        lines.push(truncateToWidth(
+          theme.fg("dim", "  " + dirIcon + entry.directory + "/"),
+          width
+        ))
+      } else {
+        const highlighted = this.active && entry.fileIdx === this.selected
+        const marker = entry.fileIdx === this.selected ? "▸" : " "
+        let icon = this.hasNerdFontInstalled ? getFileIcon(entry.file.path) : ""
+        icon = icon ? icon + " " : ""
+        const filename = entry.file.path.split("/").pop() || ""
+        const path = theme.fg(
+          highlighted ? "accent" : "muted",
+          " " + marker + " " + icon + filename
+        )
+        const stats = theme.fg("success", `+${entry.file.added}`) + " " + theme.fg("error", `−${entry.file.removed}`)
+        lines.push(truncateToWidth(path + " " + stats, width))
+      }
     }
+
+    // Bottom scroll indicator: hidden files below last visible file
+    const hiddenFilesBelow = this.files.length - lastVisibleFileIdx - 1
+    if (hiddenFilesBelow > 0) {
+      lines.push(truncateToWidth(
+        theme.fg("dim", `  ... ${hiddenFilesBelow} more file${hiddenFilesBelow === 1 ? "" : "s"}`),
+        width
+      ))
+    }
+
     return lines
+  }
+
+  private getRenderSliceForFiles(firstFileIdx: number, lastFileIdx: number): [number, number] {
+    // Validate inputs
+    if (firstFileIdx > lastFileIdx || firstFileIdx >= this.files.length || lastFileIdx < 0) {
+      return [0, 0]
+    }
+
+    // Clamp to valid range
+    const clampedFirst = Math.max(0, Math.min(firstFileIdx, this.files.length - 1))
+    const clampedLast = Math.max(0, Math.min(lastFileIdx, this.files.length - 1))
+
+    const firstRenderIdx = this.fileRenderIndices[clampedFirst]
+    const lastRenderIdx = this.fileRenderIndices[clampedLast]
+
+    // Mapping should always exist now, but defensive check
+    if (firstRenderIdx === undefined || lastRenderIdx === undefined) {
+      console.warn('[getRenderSliceForFiles] Missing render index mapping')
+      return [0, 0]
+    }
+
+    // Include preceding dir header for first file
+    const start = (firstRenderIdx > 0 && this.renderEntries[firstRenderIdx - 1].type === "dir")
+      ? firstRenderIdx - 1
+      : firstRenderIdx
+
+    const end = lastRenderIdx + 1
+
+    return [start, end]
+  }
+
+  private scrollToSelection(): void {
+    if (this.files.length === 0) return
+
+    // Keep selected in [firstVisibleFileIdx, firstVisibleFileIdx + MAX_FILE_ROWS - 1]
+    if (this.selected < this.firstVisibleFileIdx) {
+      this.firstVisibleFileIdx = this.selected
+    } else if (this.selected > this.firstVisibleFileIdx + MAX_FILE_ROWS - 1) {
+      this.firstVisibleFileIdx = this.selected - MAX_FILE_ROWS + 1
+    }
+
+    // Clamp to valid range
+    const maxFirstVisible = Math.max(0, this.files.length - MAX_FILE_ROWS)
+    this.firstVisibleFileIdx = Math.min(this.firstVisibleFileIdx, maxFirstVisible)
   }
 }
