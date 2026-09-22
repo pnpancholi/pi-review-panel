@@ -90,14 +90,17 @@ function renderPaneCell(
   const actualGutterWidth = lineNumVisible + 1 + markerVisible + 1
 
   let styledContent = content
-  if (color === "added") {
-    styledContent = !content.trim()
-      ? " ".repeat(Math.max(0, paneWidth - actualGutterWidth))
-      : theme.bg("toolSuccessBg", content)
-  } else if (color === "removed") {
-    styledContent = !content.trim()
-      ? " ".repeat(Math.max(0, paneWidth - actualGutterWidth))
-      : theme.bg("toolErrorBg", content)
+  if (color === "added" || color === "removed") {
+    const themeColor = color === "added" ? "toolSuccessBg" : "toolErrorBg"
+    const sample = theme.bg(themeColor, " ")
+    const bgPrefix = sample.substring(0, sample.indexOf(" "))
+    const bgSuffix = sample.substring(sample.indexOf(" ") + 1)
+
+    const visibleLen = visibleWidth(content)
+    const padLen = Math.max(0, paneWidth - actualGutterWidth - visibleLen)
+    const paddedContent = content + " ".repeat(padLen)
+
+    styledContent = bgPrefix + paddedContent.replace(/\x1b\[0m/g, `\x1b[0m${bgPrefix}`) + bgSuffix
   }
 
   const gutter = theme.fg("dim", lineNumber) + " " +
@@ -125,26 +128,27 @@ export class DiffView implements Component {
     this.path = options.path
     this.hasNerdFont = options.hasNerdFontInstalled ?? false
     const lang = getLanguageFromPath(this.path)
+    
     const beforeHighlighted = highlightCode(options.before.join("\n"), lang)
     const afterHighlighted = highlightCode(options.after.join("\n"), lang)
-    const diff = computeDiff(beforeHighlighted, afterHighlighted)
+    const diff = computeDiff(options.before, options.after)
 
     for (const line of diff) {
       switch (line.type) {
         case "match":
-          this.leftPane.push(beforeHighlighted[line.oldIdx])
+          this.leftPane.push(beforeHighlighted[line.oldIdx] ?? "")
           this.leftColors.push("match")
-          this.rightPane.push(afterHighlighted[line.newIdx])
+          this.rightPane.push(afterHighlighted[line.newIdx] ?? "")
           this.rightColors.push("match")
           break
         case "added":
           this.leftPane.push(" ")
           this.leftColors.push("added")
-          this.rightPane.push(afterHighlighted[line.idx])
+          this.rightPane.push(afterHighlighted[line.idx] ?? "")
           this.rightColors.push("added")
           break
         case "removed":
-          this.leftPane.push(beforeHighlighted[line.idx])
+          this.leftPane.push(beforeHighlighted[line.idx] ?? "")
           this.leftColors.push("removed")
           this.rightPane.push(" ")
           this.rightColors.push("removed")
