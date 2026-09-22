@@ -118,11 +118,13 @@ export class ReviewPanel implements Component {
   }
 
   setFiles(files: ReviewFile[]): void {
-    this.files = files
+    // Group files by directory first, then flatten so this.files matches visual order exactly
+    const groups = groupFilesByDirectory(files)
+    this.files = groups.flatMap(g => g.files)
 
-    // Restore selection by file path
+    // Restore selection by file path using the newly ordered this.files
     if (this.selectedFilePath) {
-      const idx = files.findIndex(f => f.path === this.selectedFilePath)
+      const idx = this.files.findIndex(f => f.path === this.selectedFilePath)
       if (idx >= 0) {
         this.selected = idx
       } else {
@@ -130,11 +132,10 @@ export class ReviewPanel implements Component {
         this.selectedFilePath = null
       }
     } else {
-      this.selected = Math.min(this.selected, Math.max(0, files.length - 1))
+      this.selected = Math.min(this.selected, Math.max(0, this.files.length - 1))
     }
 
     this.renderEntries = []
-    const groups = groupFilesByDirectory(files)
 
     let flatFileIdx = 0
     for (const group of groups) {
@@ -149,7 +150,7 @@ export class ReviewPanel implements Component {
     }
 
     // Build fileIdx -> renderEntries index mapping
-    this.fileRenderIndices = new Array(files.length)
+    this.fileRenderIndices = new Array(this.files.length)
     for (let i = 0; i < this.renderEntries.length; i++) {
       const entry = this.renderEntries[i]
       if (entry.type === "file") {
