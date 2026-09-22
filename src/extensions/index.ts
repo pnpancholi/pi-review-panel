@@ -96,7 +96,7 @@ export default function(pi: ExtensionAPI) {
   })
 
   // this helps with hot-reloading the panel content
-  pi.on("tool_execution_end", async (_event, ctx) => {
+  pi.on("tool_execution_end", async (_event, _ctx) => {
     if (!panel || !panelVisible) return
     await updatePanelFiles()
   })
@@ -211,7 +211,7 @@ function refreshWidgets(ui: ExtensionUIContext): void {
   }
 }
 
-async function openReviewPanel(ui: ExtensionUIContext, cwd: string): Promise<void> {
+async function openReviewPanel(ui: ExtensionUIContext, _cwd: string): Promise<void> {
   if (panelVisible) return
   panelVisible = true
   ui.setWidget("review", createReviewWidget)
@@ -220,14 +220,14 @@ async function openReviewPanel(ui: ExtensionUIContext, cwd: string): Promise<voi
 async function openDiffForFile(path: string): Promise<boolean> {
   const cwd = sessionTracker.getCWD()
   if (!cwd) return false
-  
+
   let after = ""
   try {
     after = await readFile(join(cwd, path), "utf8")
   } catch {
     after = ""
   }
-  
+
   let before = sessionTracker.getUntrackedFilesAtStart().get(path)
   if (before === undefined) {
     try {
