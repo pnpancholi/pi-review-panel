@@ -8,7 +8,9 @@
 
 A session-aware review panel for the [pi coding agent](https://pi.dev). See exactly which files the agent changed during your session and navigate the diffs — before you commit.
 
-![pi-review-panel demo](./assets/prp-demo.gif)
+<div align="center">
+<img src="./assets/prp-demo.gif" alt="pi-review-panel demo">
+</div>
 
 ## Installation
 
