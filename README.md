@@ -15,7 +15,7 @@ A session-aware review panel for the [pi coding agent](https://pi.dev). See exac
 ## Installation
 
 ```bash
-pi install npm:pi-review-panel
+pi install npm:@pnpancholi/pi-review-panel
 ```
 
 ## Usage

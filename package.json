@@ -1,7 +1,10 @@
 {
-  "name": "pi-review-panel",
+  "name": "@pnpancholi/pi-review-panel",
   "displayName": "pi-review-panel",
   "author": "Pradhumna Pancholi",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/pnpancholi/pi-review-panel.git"
@@ -13,7 +16,7 @@
   "version": "0.1.0",
   "description": "A git-based, session-aware review panel for the pi coding agent. Tracks every file the agent changes during a session and presents an interactive, keyboard-navigable diff view so you can review changes before committing.",
   "type": "module",
-  "keywords": ["pi-package", "pi-extension", "review", "diff", "tui", "code-review"],
+  "keywords": ["pi-package", "pi-extension", "pi-review-panel", "review", "diff", "tui", "code-review"],
   "license": "GPL-3.0-or-later",
   "files": ["src"],
   "scripts": {
