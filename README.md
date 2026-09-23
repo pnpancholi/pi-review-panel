@@ -24,6 +24,14 @@ pi install npm:pi-review-panel
 - **Nerd Font support** — file-type icons for a better visual experience, with a built-in installer if you don't have one
 - **Vim keybindings** — navigate with `j`/`k`, `h`/`l`, and other familiar vim motions, in addition to arrow keys
 
+## Usage Scenarios
+
+- **Co-working sessions (same branch, different session)** — running multiple sessions on the same branch, each focused on a different part of the codebase. One session handles components like `button.tsx` and `toast.tsx`, another handles API routes. The review panel keeps each session's changes isolated, so you can thoroughly review what each agent did without cross-contamination. Cognitive focus matters when shipping with LLM velocity.
+
+- **Agentic engineering with thorough review (one session, thoroughly reviewed)** — one session, one task, every line reviewed. Whether you're a new dev or a seasoned one, if your workflow demands careful human oversight of every change an agent makes, the session-aware review panel gives you a clean, focused view of exactly what changed — no noise, no distractions.
+
+- **Agent maxxing (multiple sessions, multiple branches via worktrees)** — multiple sessions across branches via worktrees. You're mid-feature when a hotfix lands, and you still need to finish docs. With [herdr](https://herdr.dev) or similar, you spin up parallel sessions across branches. The review panel keeps each branch's changes scoped to its session, so you can context-switch without losing track of what changed where.
+
 ## Caveats
 
 - **Tool-call tracking only** — the review panel captures changes made through pi's `write` and `edit` tool calls. Manual edits (e.g., opening a file in your editor, creating a file or directory via bash) won't appear in the panel. This is intentional — it keeps each session's changes isolated, so you can switch between sessions without cross-contamination.
