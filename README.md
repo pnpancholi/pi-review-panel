@@ -24,3 +24,12 @@ pi install npm:pi-review-panel
 - **Nerd Font support** — file-type icons for a better visual experience, with a built-in installer if you don't have one
 - **Vim keybindings** — navigate with `j`/`k`, `h`/`l`, and other familiar vim motions, in addition to arrow keys
 
+## Caveats
+
+- **Tool-call tracking only** — the review panel captures changes made through pi's `write` and `edit` tool calls. Manual edits (e.g., opening a file in your editor, creating a file or directory via bash) won't appear in the panel. This is intentional — it keeps each session's changes isolated, so you can switch between sessions without cross-contamination.
+
+## Support
+
+- **Bug reports** — [open an issue](https://github.com/pnpancholi/pi-review-panel/issues)
+- **Questions** — [open a discussion](https://github.com/pnpancholi/pi-review-panel/discussions) or reach out on [X/Twitter](https://x.com/knowpradhumna)
+
