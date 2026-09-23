@@ -14,3 +14,13 @@ A session-aware review panel for the [pi coding agent](https://pi.dev). See exac
 pi install npm:pi-review-panel
 ```
 
+## Features
+
+- **Review panel** — see every file changed during the current session in one place
+- **Session-aware tracking** — changes are tied to your session ID, so you can resume or start fresh without conflicts
+- **`/review` command** — toggle the panel open or closed from anywhere in your session
+- **Side-by-side diff view** — clean before/after comparison with add/remove markers and line numbers
+- **Theme-aware syntax highlighting** — code highlights match your terminal theme
+- **Nerd Font support** — file-type icons for a better visual experience, with a built-in installer if you don't have one
+- **Vim keybindings** — navigate with `j`/`k`, `h`/`l`, and other familiar vim motions, in addition to arrow keys
+
