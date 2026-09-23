@@ -28,6 +28,10 @@ pi install npm:pi-review-panel
 
 - **Tool-call tracking only** — the review panel captures changes made through pi's `write` and `edit` tool calls. Manual edits (e.g., opening a file in your editor, creating a file or directory via bash) won't appear in the panel. This is intentional — it keeps each session's changes isolated, so you can switch between sessions without cross-contamination.
 
+## Roadmap
+
+- **`/diff <filename>`** — jump directly to a file's diff without scrolling through the full list. For example, `/diff button.tsx` opens a full-screen diff view of that file. If the file hasn't been changed, you'll get a clear notification instead of an empty pane.
+
 ## Support
 
 - **Bug reports** — [open an issue](https://github.com/pnpancholi/pi-review-panel/issues)
