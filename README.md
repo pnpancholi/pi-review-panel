@@ -14,6 +14,29 @@ A session-aware review panel for the [pi coding agent](https://pi.dev). See exac
 pi install npm:pi-review-panel
 ```
 
+## Usage
+
+Run `/review` inside a pi session to toggle the review panel. It opens by default.
+
+Press `Alt+r` to toggle focus between the editor and the review panel.
+
+**Panel navigation**
+
+| Key | Action |
+| --- | --- |
+| `↑` / `↓` or `k` / `j` | Move through the file list |
+| `Enter` | Open diff for selected file |
+| `Esc` | Deactivate panel |
+
+**Diff view**
+
+| Key | Action |
+| --- | --- |
+| `↑` / `↓` or `k` / `j` | Scroll vertically |
+| `Page Up` / `Page Down` | Scroll by page |
+| `←` / `→` or `h` / `l` | Scroll horizontally |
+| `Esc` | Close diff, return to panel |
+
 ## Features
 
 - **Review panel** — see every file changed during the current session in one place
@@ -24,7 +47,7 @@ pi install npm:pi-review-panel
 - **Nerd Font support** — file-type icons for a better visual experience, with a built-in installer if you don't have one
 - **Vim keybindings** — navigate with `j`/`k`, `h`/`l`, and other familiar vim motions, in addition to arrow keys
 
-## Usage Scenarios
+## Scenarios
 
 - **Co-working sessions (same branch, different session)** — running multiple sessions on the same branch, each focused on a different part of the codebase. One session handles components like `button.tsx` and `toast.tsx`, another handles API routes. The review panel keeps each session's changes isolated, so you can thoroughly review what each agent did without cross-contamination. Cognitive focus matters when shipping with LLM velocity.
 
@@ -38,7 +61,7 @@ pi install npm:pi-review-panel
 
 ## Roadmap
 
-- **`/diff <filename>`** — jump directly to a file's diff without scrolling through the full list. For example, `/diff button.tsx` opens a full-screen diff view of that file. If the file hasn't been changed, you'll get a clear notification instead of an empty pane.
+- **`/diff <filename>` (inspired by [OpenCode](https://opencode.ai))** — jump directly to a file's diff without scrolling through the full list. For example, `/diff button.tsx` opens a full-screen diff view of that file. If the file hasn't been changed, you'll get a clear notification instead of an empty pane.
 
 ## Support
 
