@@ -8,6 +8,8 @@
 
 A session-aware review panel for the [pi coding agent](https://pi.dev). See exactly which files the agent changed during your session and navigate the diffs — before you commit.
 
+![pi-review-panel demo](./assets/prp-demo.gif)
+
 ## Installation
 
 ```bash
@@ -16,9 +18,9 @@ pi install npm:pi-review-panel
 
 ## Usage
 
-Run `/review` inside a pi session to toggle the review panel. It opens by default.
+- Run `/review` inside a pi session to toggle the review panel. It opens by default when you start a session.
 
-Press `Alt+r` to toggle focus between the editor and the review panel.
+- Press `Alt+r` to toggle focus between the editor and the review panel.
 
 **Panel navigation**
 
